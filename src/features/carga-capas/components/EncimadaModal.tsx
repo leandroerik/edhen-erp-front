@@ -53,13 +53,13 @@ const COLOR_SWATCH: Record<string, string> = {
 }
 
 const inputCls =
-  'h-9 sm:h-8 w-full rounded border border-stone-300 bg-white px-2 text-sm text-stone-900 focus:border-amber-600 focus:outline-none'
+  'h-10 w-full rounded border border-stone-300 bg-white px-3 text-sm text-stone-900 focus:border-amber-600 focus:outline-none'
 const numberInputCls =
-  'h-9 sm:h-8 w-20 rounded border border-stone-300 bg-white px-2 text-center text-sm font-semibold text-stone-900 focus:border-amber-600 focus:outline-none'
+  'h-10 w-20 rounded border border-stone-300 bg-white px-2 text-center text-sm font-semibold text-stone-900 focus:border-amber-600 focus:outline-none'
 const labelCls = 'mb-1 block text-xs font-medium text-stone-500'
 const th = 'px-3 py-2 text-xs font-semibold uppercase tracking-wide text-stone-500'
 const thRight = `${th} text-right`
-const td = 'px-3 py-1.5 text-sm text-stone-900'
+const td = 'px-3 py-2.5 text-sm text-stone-900'
 const tdRight = `${td} text-right tabular-nums`
 
 function calcularPorcentajesPonderados(cantidades: number[]): number[] {
@@ -92,7 +92,8 @@ function filasDesdeEncimada(encimada?: Encimada): CapaFila[] {
   }
 
   const filas = Array.from(agrupadas.values())
-  return filas.length ? filas : [{ id: uid('fila'), color: '', capas: 0 }]
+  // Siempre termina con una fila ghost vacía
+  return [...filas, { id: uid('fila'), color: '', capas: 0 }]
 }
 
 export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Props) {
@@ -106,18 +107,32 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
   )
   const [selectedRolloKey, setSelectedRolloKey] = useState('')
 
-
   const [items, setItems] = useState<EncimadaItem[]>(() => {
     if (encimada?.items && encimada.items.length > 0) {
       const tienePcts = encimada.items.every(
         (i) => typeof i.porcentaje === 'number' && i.porcentaje > 0,
       )
-      if (tienePcts) return encimada.items
-      const pcts = calcularPorcentajesPonderados(encimada.items.map((i) => i.cantidad))
-      return encimada.items.map((it, idx) => ({ ...it, porcentaje: pcts[idx] }))
+      const base = tienePcts
+        ? encimada.items
+        : (() => {
+            const pcts = calcularPorcentajesPonderados(encimada.items.map((i) => i.cantidad))
+            return encimada.items.map((it, idx) => ({ ...it, porcentaje: pcts[idx] }))
+          })()
+      // Agregar ghost al final
+      return [...base, { id: uid('ei'), modeloNombre: '', cantidad: 0, porcentaje: 0 }]
     }
     return [{ id: uid('ei'), modeloNombre: '', cantidad: 0, porcentaje: 100 }]
   })
+
+  // Helper: asegura ghost al final de items
+  const ensureItemsGhost = (list: EncimadaItem[]): EncimadaItem[] => {
+    if (list.length === 0) return [{ id: uid('ei'), modeloNombre: '', cantidad: 0, porcentaje: 100 }]
+    const last = list[list.length - 1]
+    if (last.modeloNombre.trim() || last.cantidad > 0) {
+      return [...list, { id: uid('ei'), modeloNombre: '', cantidad: 0, porcentaje: 0 }]
+    }
+    return list
+  }
 
   const largoCapa = encimada?.largoCapa ?? 1.2
   const capasTotales = filas.reduce((a, f) => a + (Number(f.capas) || 0), 0)
@@ -215,7 +230,6 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
     setTelasUsadas((prev) => [...prev, nuevaTela])
     setSelectedRolloKey('')
 
-    // Asegurar que el color esté en la tabla de capas por conveniencia
     setFilas((prev) => {
       const existe = prev.some(
         (f) => f.color.trim().toLowerCase() === opcion.colorNombre.trim().toLowerCase(),
@@ -229,8 +243,6 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
       return prev
     })
   }
-
-
 
   const updateTelaRollos = (id: string, rawVal: number | string) => {
     setTelasUsadas((prev) =>
@@ -270,25 +282,27 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
   }
 
   const updateFila = (id: string, patch: Partial<Pick<CapaFila, 'color' | 'capas'>>) => {
-    setFilas((prev) => prev.map((f) => (f.id === id ? { ...f, ...patch } : f)))
-  }
-
-  const addFila = () => {
-    setFilas((prev) => [...prev, { id: uid('fila'), color: '', capas: 0 }])
+    setFilas((prev) => {
+      const updated = prev.map((f) => (f.id === id ? { ...f, ...patch } : f))
+      // Si se editó la última fila (ghost) y ya tiene contenido → agregar nueva ghost
+      const last = updated[updated.length - 1]
+      if (last.id === id && (last.color.trim() || last.capas > 0)) {
+        return [...updated, { id: uid('fila'), color: '', capas: 0 }]
+      }
+      return updated
+    })
   }
 
   const removeFila = (id: string) => {
     setFilas((prev) => {
       const next = prev.filter((f) => f.id !== id)
-      return next.length ? next : [{ id: uid('fila'), color: '', capas: 0 }]
-    })
-  }
-
-  const addItem = () => {
-    setItems((prev) => {
-      const next = [...prev, { id: uid('ei'), modeloNombre: '', cantidad: 0, porcentaje: 0 }]
-      const pcts = calcularPorcentajesPonderados(next.map((i) => i.cantidad))
-      return next.map((it, idx) => ({ ...it, porcentaje: pcts[idx] }))
+      if (next.length === 0) return [{ id: uid('fila'), color: '', capas: 0 }]
+      // Asegurar que siempre haya una ghost al final
+      const last = next[next.length - 1]
+      if (last.color.trim() || last.capas > 0) {
+        return [...next, { id: uid('fila'), color: '', capas: 0 }]
+      }
+      return next
     })
   }
 
@@ -297,7 +311,15 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
       const cant = Math.max(0, Math.round(cantidad))
       const next = prev.map((i) => (i.id === id ? { ...i, cantidad: cant } : i))
       const pcts = calcularPorcentajesPonderados(next.map((i) => i.cantidad))
-      return next.map((it, idx) => ({ ...it, porcentaje: pcts[idx] }))
+      const updated = next.map((it, idx) => ({ ...it, porcentaje: pcts[idx] }))
+      return ensureItemsGhost(updated)
+    })
+  }
+
+  const updateItemNombre = (id: string, modeloNombre: string) => {
+    setItems((prev) => {
+      const next = prev.map((i) => (i.id === id ? { ...i, modeloNombre } : i))
+      return ensureItemsGhost(next)
     })
   }
 
@@ -308,7 +330,8 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
         ? next
         : [{ id: uid('ei'), modeloNombre: '', cantidad: 0, porcentaje: 100 }]
       const pcts = calcularPorcentajesPonderados(lista.map((i) => i.cantidad))
-      return lista.map((it, idx) => ({ ...it, porcentaje: pcts[idx] }))
+      const updated = lista.map((it, idx) => ({ ...it, porcentaje: pcts[idx] }))
+      return ensureItemsGhost(updated)
     })
   }
 
@@ -349,21 +372,16 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="flex max-h-[92vh] w-full max-w-3xl flex-col rounded-lg bg-white shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4">
+      <div className="flex max-h-[95vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-h-[92vh] sm:max-w-2xl sm:rounded-lg">
         {/* Cabecera */}
         <div className="flex items-center justify-between border-b border-stone-200 px-4 py-3">
-          <div>
-            <h2 className="text-base font-semibold text-stone-900">
-              {encimada ? 'Editar encimada' : 'Nueva encimada'}
-            </h2>
-            <p className="text-xs text-stone-500">
-              Cargá las capas por color y los modelos de la tizada.
-            </p>
-          </div>
+          <h2 className="text-base font-semibold text-stone-900">
+            {encimada ? 'Editar encimada' : 'Nueva encimada'}
+          </h2>
           <button
             onClick={onClose}
-            className="flex h-7 w-7 items-center justify-center rounded text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-stone-400 hover:bg-stone-100 hover:text-stone-700"
           >
             ✕
           </button>
@@ -371,7 +389,7 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
 
         {/* Datos generales */}
         <div className="border-b border-stone-200 bg-stone-50 px-4 py-3">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Código</label>
               <input
@@ -414,7 +432,149 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
 
         {/* Cuerpo del formulario */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {/* Telas opcionales, agrupadas por tela y compra */}
+
+          {/* Capas y modelos */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {/* Capas por color */}
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wide text-stone-600">
+                  Capas por color
+                </span>
+                <span className="text-xs text-stone-500">
+                  Total: <strong className="text-stone-800">{capasTotales}</strong>
+                </span>
+              </div>
+              <div className="overflow-hidden rounded border border-stone-200">
+                <table className="w-full divide-y divide-stone-200">
+                  <thead className="bg-stone-50">
+                    <tr>
+                      <th className={`${th} text-left`}>Color</th>
+                      <th className={thRight}>Capas</th>
+                      <th className="w-8" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {filas.map((f) => (
+                      <tr key={f.id}>
+                        <td className="p-1.5">
+                          <input
+                            list="colores-carga-capas"
+                            className={inputCls}
+                            value={f.color}
+                            onChange={(e) => updateFila(f.id, { color: e.target.value })}
+                            placeholder="Color"
+                          />
+                        </td>
+                        <td className="p-1.5 text-right">
+                          <input
+                            type="number"
+                            min={0}
+                            className={numberInputCls}
+                            value={f.capas || ''}
+                            onFocus={(e) => e.currentTarget.select()}
+                            onChange={(e) =>
+                              updateFila(f.id, {
+                                capas: Math.max(0, Math.round(Number(e.target.value) || 0)),
+                              })
+                            }
+                            placeholder="0"
+                          />
+                        </td>
+                        <td className="p-1.5 text-center">
+                          <button
+                            type="button"
+                            onClick={() => removeFila(f.id)}
+                            className="flex h-8 w-8 items-center justify-center rounded-full text-stone-400 hover:bg-stone-100 hover:text-red-600"
+                            title="Quitar"
+                          >
+                            ✕
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-1.5 text-[10px] text-stone-400 px-1">
+                Escribí en la última fila para agregar más colores.
+              </div>
+            </div>
+
+            {/* Modelos — tabla unificada mobile + desktop */}
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wide text-stone-600">
+                  Modelos
+                </span>
+                <span className="text-xs text-stone-500">
+                  {itemsValidos.length}{' '}
+                  {itemsValidos.length === 1 ? 'modelo' : 'modelos'}
+                </span>
+              </div>
+              <div className="overflow-hidden rounded border border-stone-200">
+                <table className="w-full divide-y divide-stone-200">
+                  <thead className="bg-stone-50">
+                    <tr>
+                      <th className={`${th} text-left`}>Modelo</th>
+                      <th className={thRight} title="Talles o moldes en tizada">Talles</th>
+                      <th className={thRight} title="Prendas = capas × talles">Prendas</th>
+                      <th className="w-8" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {items.map((it) => {
+                      const prendasItem = capasTotales * (Number(it.cantidad) || 0)
+                      return (
+                        <tr key={it.id}>
+                          <td className="p-1.5">
+                            <input
+                              list="modelos-carga-capas"
+                              className={inputCls}
+                              value={it.modeloNombre}
+                              onChange={(e) => updateItemNombre(it.id, e.target.value)}
+                              placeholder="Modelo"
+                            />
+                          </td>
+                          <td className="p-1.5 text-right">
+                            <input
+                              type="number"
+                              min={0}
+                              className="h-10 w-14 rounded border border-stone-300 bg-white px-1 text-center text-sm font-semibold text-stone-900 focus:border-amber-600 focus:outline-none"
+                              value={it.cantidad || ''}
+                              onFocus={(e) => e.currentTarget.select()}
+                              onChange={(e) =>
+                                updateItemCantidad(it.id, Number(e.target.value) || 0)
+                              }
+                              placeholder="1"
+                            />
+                          </td>
+                          <td className={`${tdRight} font-semibold text-stone-700`}>
+                            {prendasItem}
+                          </td>
+                          <td className="p-1.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => removeItem(it.id)}
+                              className="flex h-8 w-8 items-center justify-center rounded-full text-stone-400 hover:bg-stone-100 hover:text-red-600"
+                              title="Quitar"
+                            >
+                              ✕
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-1.5 text-[10px] text-stone-400 px-1">
+                Escribí en la última fila para agregar más modelos.
+              </div>
+            </div>
+          </div>
+
+          {/* Telas y costos (colapsable, opcional) */}
           <details className="group rounded-lg border border-stone-200 bg-white">
             <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 [&::-webkit-details-marker]:hidden">
               <div className="flex items-center gap-2">
@@ -444,10 +604,6 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
             </summary>
 
             <div className="space-y-2.5 border-t border-stone-200 p-3">
-              <p className="text-xs text-stone-500">
-                Se agrupan por tela y compra. Indicá solo los rollos por color.
-              </p>
-
               <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
                 <select
                   className={inputCls}
@@ -544,7 +700,7 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
                                     type="button"
                                     disabled={tela.rollosUsados <= 1}
                                     onClick={() => updateTelaRollos(tela.id, tela.rollosUsados - 1)}
-                                    className="h-6 w-6 flex items-center justify-center rounded bg-white text-stone-700 font-bold hover:bg-stone-50 disabled:opacity-30 disabled:cursor-not-allowed shadow-xs text-xs"
+                                    className="h-7 w-7 flex items-center justify-center rounded bg-white text-stone-700 font-bold hover:bg-stone-50 disabled:opacity-30 disabled:cursor-not-allowed shadow-xs text-xs"
                                     title="Usar 1 rollo menos"
                                   >
                                     −
@@ -553,7 +709,7 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
                                     type="number"
                                     min={1}
                                     max={tela.rollosDisponibles}
-                                    className="h-6 w-11 rounded border border-stone-300 bg-white px-1 text-center text-xs font-bold text-stone-900 focus:border-amber-600 focus:outline-none"
+                                    className="h-7 w-11 rounded border border-stone-300 bg-white px-1 text-center text-xs font-bold text-stone-900 focus:border-amber-600 focus:outline-none"
                                     value={tela.rollosUsados === 0 ? '' : tela.rollosUsados}
                                     onFocus={(e) => e.currentTarget.select()}
                                     onChange={(e) =>
@@ -572,7 +728,7 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
                                     type="button"
                                     disabled={tela.rollosUsados >= tela.rollosDisponibles}
                                     onClick={() => updateTelaRollos(tela.id, tela.rollosUsados + 1)}
-                                    className="h-6 w-6 flex items-center justify-center rounded bg-white text-stone-700 font-bold hover:bg-stone-50 disabled:opacity-30 disabled:cursor-not-allowed shadow-xs text-xs"
+                                    className="h-7 w-7 flex items-center justify-center rounded bg-white text-stone-700 font-bold hover:bg-stone-50 disabled:opacity-30 disabled:cursor-not-allowed shadow-xs text-xs"
                                     title="Usar 1 rollo más"
                                   >
                                     +
@@ -592,7 +748,7 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
                                 <button
                                   type="button"
                                   onClick={() => removeTela(tela.id)}
-                                  className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] text-stone-400 hover:bg-stone-100 hover:text-red-600"
+                                  className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] text-stone-400 hover:bg-stone-100 hover:text-red-600"
                                   title="Quitar tela"
                                 >
                                   ✕
@@ -609,238 +765,6 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
             </div>
           </details>
 
-          {/* Capas y modelos: lo principal de la encimada */}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {/* Colores y Capas */}
-            <div>
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wide text-stone-600">
-                  Capas por color
-                </span>
-                <span className="text-xs text-stone-500">
-                  Total: <strong className="text-stone-800">{capasTotales}</strong> capas
-                </span>
-              </div>
-              <div className="overflow-hidden rounded border border-stone-200">
-                <table className="w-full divide-y divide-stone-200">
-                  <thead className="bg-stone-50">
-                    <tr>
-                      <th className={`${th} text-left`}>Color</th>
-                      <th className={thRight}>Capas</th>
-                      <th className="w-8"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-100">
-                    {filas.map((f) => (
-                      <tr key={f.id}>
-                        <td className="p-1.5">
-                          <input
-                            list="colores-carga-capas"
-                            className={inputCls}
-                            value={f.color}
-                            onChange={(e) => updateFila(f.id, { color: e.target.value })}
-                            placeholder="Color"
-                          />
-                        </td>
-                        <td className="p-1.5 text-right">
-                          <input
-                            type="number"
-                            min={0}
-                            className={numberInputCls}
-                            value={f.capas || ''}
-                            onFocus={(e) => e.currentTarget.select()}
-                            onChange={(e) =>
-                              updateFila(f.id, {
-                                capas: Math.max(0, Math.round(Number(e.target.value) || 0)),
-                              })
-                            }
-                            placeholder="0"
-                          />
-                        </td>
-                        <td className="p-1.5 text-center">
-                          <button
-                            type="button"
-                            onClick={() => removeFila(f.id)}
-                            className="text-xs text-stone-400 hover:text-red-600"
-                            title="Quitar"
-                          >
-                            ✕
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="mt-2">
-                <button
-                  type="button"
-                  onClick={addFila}
-                  className="text-xs font-medium text-amber-700 hover:text-amber-800"
-                >
-                  + Agregar color
-                </button>
-              </div>
-            </div>
-
-            {/* Modelos */}
-            <div>
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wide text-stone-600">
-                  Modelos
-                </span>
-                <span className="text-xs text-stone-500">
-                  {itemsValidos.length}{' '}
-                  {itemsValidos.length === 1 ? 'modelo' : 'modelos'}
-                </span>
-              </div>
-
-              {/* Vista Mobile: Tarjetas por modelo */}
-              <div className="space-y-2 sm:hidden">
-                {items.map((it) => {
-                  const prendasItem = capasTotales * (Number(it.cantidad) || 0)
-
-                  return (
-                    <div
-                      key={it.id}
-                      className="rounded-lg border border-stone-200 bg-stone-50/50 p-2 space-y-2"
-                    >
-                      <div className="flex items-center gap-2">
-                        <input
-                          list="modelos-carga-capas"
-                          className={inputCls}
-                          value={it.modeloNombre}
-                          onChange={(e) =>
-                            setItems((prev) =>
-                              prev.map((i) =>
-                                i.id === it.id ? { ...i, modeloNombre: e.target.value } : i,
-                              ),
-                            )
-                          }
-                          placeholder="Nombre del modelo"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeItem(it.id)}
-                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded text-stone-400 hover:bg-stone-100 hover:text-red-600"
-                          title="Quitar"
-                        >
-                          ✕
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div>
-                          <label className="mb-0.5 block text-[10px] font-medium text-stone-500">
-                            Talles/moldes
-                          </label>
-                          <input
-                            type="number"
-                            min={0}
-                            className="h-9 w-full rounded border border-stone-300 bg-white px-1 text-center font-semibold text-stone-900 focus:border-amber-600 focus:outline-none"
-                            value={it.cantidad || ''}
-                            onFocus={(e) => e.currentTarget.select()}
-                            onChange={(e) =>
-                              updateItemCantidad(it.id, Number(e.target.value) || 0)
-                            }
-                            placeholder="1"
-                          />
-                        </div>
-                        <div>
-                          <label className="mb-0.5 block text-[10px] font-medium text-stone-500">
-                            Prendas
-                          </label>
-                          <div className="flex h-9 items-center justify-center rounded border border-stone-200 bg-white font-bold text-stone-800">
-                            {prendasItem}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-
-              {/* Vista Escritorio: Tabla */}
-              <div className="hidden overflow-hidden rounded border border-stone-200 sm:block">
-                <table className="w-full divide-y divide-stone-200">
-                  <thead className="bg-stone-50">
-                    <tr>
-                      <th className={`${th} text-left`}>Modelo</th>
-                      <th className={thRight} title="Talles o moldes en tizada">
-                        Talles
-                      </th>
-                      <th className={thRight} title="Prendas totales = capas × talles">
-                        Prendas
-                      </th>
-                      <th className="w-7"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-100">
-                    {items.map((it) => {
-                      const prendasItem = capasTotales * (Number(it.cantidad) || 0)
-
-                      return (
-                        <tr key={it.id}>
-                          <td className="p-1.5">
-                            <input
-                              list="modelos-carga-capas"
-                              className={inputCls}
-                              value={it.modeloNombre}
-                              onChange={(e) =>
-                                setItems((prev) =>
-                                  prev.map((i) =>
-                                    i.id === it.id ? { ...i, modeloNombre: e.target.value } : i,
-                                  ),
-                                )
-                              }
-                              placeholder="Modelo"
-                            />
-                          </td>
-                          <td className="p-1.5 text-right">
-                            <input
-                              type="number"
-                              min={0}
-                              className="h-8 w-14 rounded border border-stone-300 bg-white px-1 text-center text-sm font-semibold text-stone-900 focus:border-amber-600 focus:outline-none"
-                              value={it.cantidad || ''}
-                              onFocus={(e) => e.currentTarget.select()}
-                              onChange={(e) =>
-                                updateItemCantidad(it.id, Number(e.target.value) || 0)
-                              }
-                              placeholder="1"
-                            />
-                          </td>
-                          <td className={`${tdRight} text-xs font-semibold text-stone-700`}>
-                            {prendasItem}
-                          </td>
-                          <td className="p-1 text-center">
-                            <button
-                              type="button"
-                              onClick={() => removeItem(it.id)}
-                              className="text-xs text-stone-400 hover:text-red-600"
-                              title="Quitar"
-                            >
-                              ✕
-                            </button>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="mt-2">
-                <button
-                  type="button"
-                  onClick={addItem}
-                  className="text-xs font-medium text-amber-700 hover:text-amber-800"
-                >
-                  + Agregar modelo
-                </button>
-              </div>
-            </div>
-          </div>
-
           <datalist id="colores-carga-capas">
             {mockColores.map((c) => (
               <option key={c.id} value={c.nombre} />
@@ -856,15 +780,15 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
 
         {/* Pie con totales y botones */}
         <div className="flex flex-col items-stretch justify-between gap-3 border-t border-stone-200 bg-white px-4 py-3 sm:flex-row sm:items-center">
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs sm:justify-start sm:gap-4 sm:text-sm">
+          <div className="flex flex-wrap items-center gap-4 text-xs sm:text-sm">
             <span>
               Capas: <strong className="text-stone-900">{capasTotales}</strong>
             </span>
-            <span className="hidden text-stone-300 sm:inline">|</span>
+            <span className="text-stone-300">|</span>
             <span>
               Modelos: <strong className="text-stone-900">{itemsValidos.length}</strong>
             </span>
-            <span className="hidden text-stone-300 sm:inline">|</span>
+            <span className="text-stone-300">|</span>
             <span>
               Prendas: <strong className="text-stone-900">{prendasTotales}</strong>
             </span>
@@ -878,7 +802,7 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
               disabled={!puedeGuardar}
               onClick={handleSave}
             >
-              Guardar encimada
+              Guardar
             </Button>
           </div>
         </div>

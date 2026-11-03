@@ -62,17 +62,24 @@ export function ArticulosPage() {
 
   const articulosFiltrados = useMemo(() => {
     const q = busqueda.toLowerCase().trim()
-    if (!q) return articulos
-    return articulos.filter((a) => {
-      const enNombre = (a.nombre || '').toLowerCase().includes(q)
-      const enCodigo = a.codigoArticulo.toLowerCase().includes(q)
-      const enDesc = (a.descripcion || '').toLowerCase().includes(q)
-      const enTelas = (a.telas || []).some(
-        (t) =>
-          t.telaNombre.toLowerCase().includes(q) ||
-          t.colorNombre.toLowerCase().includes(q),
-      )
-      return enNombre || enCodigo || enDesc || enTelas
+    const lista = q
+      ? articulos.filter((a) => {
+          const enNombre = (a.nombre || '').toLowerCase().includes(q)
+          const enCodigo = a.codigoArticulo.toLowerCase().includes(q)
+          const enDesc = (a.descripcion || '').toLowerCase().includes(q)
+          const enTelas = (a.telas || []).some(
+            (t) =>
+              t.telaNombre.toLowerCase().includes(q) ||
+              t.colorNombre.toLowerCase().includes(q),
+          )
+          return enNombre || enCodigo || enDesc || enTelas
+        })
+      : articulos
+    // Mas nuevo primero
+    return [...lista].sort((a, b) => {
+      const numA = parseInt(/(\d+)/.exec(a.codigoArticulo)?.[1] ?? '0', 10)
+      const numB = parseInt(/(\d+)/.exec(b.codigoArticulo)?.[1] ?? '0', 10)
+      return numB - numA
     })
   }, [articulos, busqueda])
 
