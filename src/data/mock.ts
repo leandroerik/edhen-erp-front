@@ -350,7 +350,7 @@ export const mockPagos: PagoTaller[] = [
   { id: 'pag-1', fecha: '2025-10-10', tallerId: 'tal-1', tallerNombre: 'Taller Ana', corteId: 'c-1', corteCodigo: 'C-0001', monto: 20000, tipo: 'ADELANTO', concepto: 'Adelanto para inicio de confección' },
 ]
 
-const usoPorLote: Record<string, { rollos: number; cantidad: number }> = {
+const mockUsoPorLote: Record<string, { rollos: number; cantidad: number }> = {
   'COMP-0001-lote-1': { rollos: 1, cantidad: 14.4 },
   'COMP-0002-lote-4': { rollos: 1, cantidad: 12 },
   'COMP-0003-lote-7': { rollos: 1, cantidad: 9.5 },
@@ -361,54 +361,242 @@ const usoPorLote: Record<string, { rollos: number; cantidad: number }> = {
   'COMP-0009-lote-25': { rollos: 3, cantidad: 45 },
 }
 
-export function stockDesdeCompras(compras: Compra[]): StockColor[] {
-  const porColor = new Map<string, StockColor>()
+export interface UsoLoteStock {
+  compraCodigo?: string
+  loteId?: string
+  telaNombre: string
+  colorNombre: string
+  rollosUsados: number
+  cantidadUsada: number
+}
+
+const normalizarClave = (valor: string) => (valor || '').trim().toLowerCase()
+
+export function usosStockDesdeDatos(
+  encimadas: Encimada[],
+  articulos: Articulo[],
+): UsoLoteStock[] {
+  const usos = new Map<string, UsoLoteStock>()
+
+  const acumular = (tela: {
+    compraCodigo?: string
+    loteId?: string
+    telaNombre: string
+    colorNombre: string
+    rollosUsados?: number
+    cantidadUsada?: number
+  }) => {
+    const rollosUsados = Number(tela.rollosUsados) || 0
+    const cantidadUsada = Number(tela.cantidadUsada) || 0
+    if (rollosUsados <= 0 && cantidadUsada <= 0) return
+
+    const tieneLote = Boolean(tela.compraCodigo && tela.loteId)
+    const key = tieneLote
+      ? `lote:${tela.compraCodigo}-${tela.loteId}`
+      : `tela:${normalizarClave(tela.telaNombre)}|${normalizarClave(tela.colorNombre)}`
+    const actual = usos.get(key)
+
+    if (actual) {
+      actual.rollosUsados += rollosUsados
+      actual.cantidadUsada += cantidadUsada
+    } else {
+      usos.set(key, {
+        ...(tieneLote
+          ? { compraCodigo: tela.compraCodigo, loteId: tela.loteId }
+          : {}),
+        telaNombre: tela.telaNombre,
+        colorNombre: tela.colorNombre,
+        rollosUsados,
+        cantidadUsada,
+      })
+    }
+  }
+
+  const encimadasConUso = new Set(
+    encimadas
+      .filter((encimada) => (encimada.telasUsadas?.length ?? 0) > 0)
+      .map((encimada) => encimada.id),
+  )
+
+  for (const encimada of encimadas) {
+    for (const tela of encimada.telasUsadas ?? []) {
+      acumular({
+        compraCodigo: tela.compraCodigo,
+        loteId: tela.loteId,
+        telaNombre: tela.telaNombre,
+        colorNombre: tela.colorNombre,
+        rollosUsados: tela.rollosUsados,
+        cantidadUsada: tela.cantidadUsada,
+      })
+    }
+  }
+
+  for (const articulo of articulos) {
+    if (articulo.encimadaId && encimadasConUso.has(articulo.encimadaId)) continue
+    for (const tela of articulo.telas ?? []) {
+      if (tela.compraCodigo === 'CUSTOM') continue
+      acumular({
+        compraCodigo: tela.compraCodigo,
+        loteId: tela.loteId,
+        telaNombre: tela.telaNombre,
+        colorNombre: tela.colorNombre,
+        rollosUsados: tela.rollosUsados,
+        cantidadUsada: tela.cantidadUsar,
+      })
+    }
+  }
+
+  return Array.from(usos.values())
+}
+
+export function stockDesdeCompras(
+  compras: Compra[],
+  usos?: UsoLoteStock[],
+): StockColor[] {
+  const lotes: Array<{
+    compra: Compra
+    lote: Compra['lotes'][number]
+    usadoRollos: number
+    usadoCantidad: number
+  }> = []
 
   for (const compra of compras) {
     for (const lote of compra.lotes) {
-      const key = `${compra.telaId}-${lote.colorId}`
-      const uso = usoPorLote[`${compra.codigo}-${lote.id}`] ?? { rollos: 0, cantidad: 0 }
-      const detalle = {
-        loteId: lote.id,
-        compraCodigo: compra.codigo,
-        fechaCompra: compra.fecha,
-        proveedorNombre: compra.proveedorNombre,
-        rollos: lote.rollos,
-        cantidad: lote.cantidad,
-        usadoRollos: uso.rollos,
-        usadoCantidad: uso.cantidad,
-      }
-      const actual = porColor.get(key)
+      lotes.push({ compra, lote, usadoRollos: 0, usadoCantidad: 0 })
+    }
+  }
 
-      if (actual) {
-        actual.compradoRollos += lote.rollos
-        actual.compradoCantidad += lote.cantidad
-        actual.usadoRollos += uso.rollos
-        actual.usadoCantidad += uso.cantidad
-        actual.disponibleRollos = actual.compradoRollos - actual.usadoRollos
-        actual.disponibleCantidad = actual.compradoCantidad - actual.usadoCantidad
-        actual.lotesDetalle.push(detalle)
+  const exactos = new Map<string, { rollos: number; cantidad: number }>()
+  const genericos = new Map<string, { rollos: number; cantidad: number }>()
+
+  const sumarUso = (
+    destino: Map<string, { rollos: number; cantidad: number }>,
+    key: string,
+    rollos: number,
+    cantidad: number,
+  ) => {
+    const actual = destino.get(key)
+    if (actual) {
+      actual.rollos += rollos
+      actual.cantidad += cantidad
+    } else {
+      destino.set(key, { rollos, cantidad })
+    }
+  }
+
+  if (usos) {
+    const clavesValidas = new Set(
+      lotes.map(({ compra, lote }) => `${compra.codigo}-${lote.id}`),
+    )
+    for (const uso of usos) {
+      const keyLote =
+        uso.compraCodigo && uso.loteId ? `${uso.compraCodigo}-${uso.loteId}` : ''
+      if (keyLote && clavesValidas.has(keyLote)) {
+        sumarUso(exactos, keyLote, uso.rollosUsados, uso.cantidadUsada)
       } else {
-        porColor.set(key, {
-          telaId: compra.telaId,
-          telaNombre: compra.telaNombre,
-          colorId: lote.colorId,
-          colorNombre: lote.colorNombre,
-          unidad: compra.unidadCompra,
-          precioUnitario: compra.precioUnitario,
-          compradoRollos: lote.rollos,
-          compradoCantidad: lote.cantidad,
-          usadoRollos: uso.rollos,
-          usadoCantidad: uso.cantidad,
-          disponibleRollos: lote.rollos - uso.rollos,
-          disponibleCantidad: lote.cantidad - uso.cantidad,
-          lotesDetalle: [detalle],
-        })
+        const keyTela = `${normalizarClave(uso.telaNombre)}|${normalizarClave(uso.colorNombre)}`
+        sumarUso(genericos, keyTela, uso.rollosUsados, uso.cantidadUsada)
+      }
+    }
+  } else {
+    for (const { compra, lote } of lotes) {
+      const mockUso = mockUsoPorLote[`${compra.codigo}-${lote.id}`]
+      if (mockUso) {
+        sumarUso(exactos, `${compra.codigo}-${lote.id}`, mockUso.rollos, mockUso.cantidad)
       }
     }
   }
 
-  return Array.from(porColor.values())
+  for (const item of lotes) {
+    const uso = exactos.get(`${item.compra.codigo}-${item.lote.id}`)
+    if (!uso) continue
+    item.usadoRollos = uso.rollos
+    item.usadoCantidad = uso.cantidad
+  }
+
+  if (genericos.size > 0) {
+    const porTelaColor = new Map<string, typeof lotes>()
+    for (const item of lotes) {
+      const key = `${normalizarClave(item.compra.telaNombre)}|${normalizarClave(item.lote.colorNombre)}`
+      const grupo = porTelaColor.get(key)
+      if (grupo) grupo.push(item)
+      else porTelaColor.set(key, [item])
+    }
+
+    for (const [key, uso] of genericos) {
+      const candidatos = (porTelaColor.get(key) ?? []).sort((a, b) =>
+        String(a.compra.fecha).localeCompare(String(b.compra.fecha)),
+      )
+      let pendienteRollos = uso.rollos
+      let pendienteCantidad = uso.cantidad
+
+      for (const item of candidatos) {
+        if (pendienteRollos <= 0 && pendienteCantidad <= 0) break
+        const disponibleRollos = Math.max(0, item.lote.rollos - item.usadoRollos)
+        const disponibleCantidad = Math.max(0, item.lote.cantidad - item.usadoCantidad)
+        const usarRollos = Math.min(disponibleRollos, pendienteRollos)
+        const usarCantidad = Math.min(disponibleCantidad, pendienteCantidad)
+
+        item.usadoRollos += usarRollos
+        item.usadoCantidad += usarCantidad
+        pendienteRollos -= usarRollos
+        pendienteCantidad -= usarCantidad
+      }
+    }
+  }
+
+  const porColor = new Map<string, StockColor>()
+
+  for (const { compra, lote, usadoRollos, usadoCantidad } of lotes) {
+    const key = `${compra.telaId}-${lote.colorId}`
+    const detalle = {
+      loteId: lote.id,
+      compraCodigo: compra.codigo,
+      fechaCompra: compra.fecha,
+      proveedorNombre: compra.proveedorNombre,
+      precioUnitario: Number(compra.precioUnitario) || 0,
+      rollos: lote.rollos,
+      cantidad: lote.cantidad,
+      usadoRollos,
+      usadoCantidad,
+    }
+    const actual = porColor.get(key)
+
+    if (actual) {
+      actual.compradoRollos += lote.rollos
+      actual.compradoCantidad += lote.cantidad
+      actual.usadoRollos += usadoRollos
+      actual.usadoCantidad += usadoCantidad
+      actual.disponibleRollos = actual.compradoRollos - actual.usadoRollos
+      actual.disponibleCantidad = actual.compradoCantidad - actual.usadoCantidad
+      actual.lotesDetalle.push(detalle)
+    } else {
+      porColor.set(key, {
+        telaId: compra.telaId,
+        telaNombre: compra.telaNombre,
+        colorId: lote.colorId,
+        colorNombre: lote.colorNombre,
+        unidad: compra.unidadCompra,
+        precioUnitario: Number(compra.precioUnitario) || 0,
+        compradoRollos: lote.rollos,
+        compradoCantidad: lote.cantidad,
+        usadoRollos,
+        usadoCantidad,
+        disponibleRollos: lote.rollos - usadoRollos,
+        disponibleCantidad: lote.cantidad - usadoCantidad,
+        lotesDetalle: [detalle],
+      })
+    }
+  }
+
+  const stock = Array.from(porColor.values())
+  for (const item of stock) {
+    const ultimoLote = [...item.lotesDetalle].sort((a, b) =>
+      String(b.fechaCompra).localeCompare(String(a.fechaCompra)),
+    )[0]
+    if (ultimoLote) item.precioUnitario = ultimoLote.precioUnitario
+  }
+  return stock
 }
 
 export const mockStock: StockColor[] = stockDesdeCompras(mockCompras)

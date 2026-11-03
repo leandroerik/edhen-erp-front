@@ -2,7 +2,8 @@ import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
 import { formatDate } from '../../../utils/format'
 import { formatCantidad, getStockInfo } from '../../../utils/stock'
-import { mockStock } from '../../../data/mock'
+import { stockDesdeCompras, usosStockDesdeDatos } from '../../../data/mock'
+import { useErpStore } from '../../../data/erpStore'
 import type { Compra } from '../../../types'
 
 interface Props {
@@ -60,6 +61,9 @@ function CompactStock({
 }
 
 export function CompraDetalleModal({ compra, onClose }: Props) {
+  const { compras, encimadas, articulos } = useErpStore()
+  const usosStock = usosStockDesdeDatos(encimadas, articulos)
+  const stockActual = stockDesdeCompras(compras, usosStock)
   const lotes = compra.lotes || []
   const totalRollos = lotes.reduce((a, l) => a + (Number(l.rollos) || 0), 0)
   const totalCantidad = lotes.reduce((a, l) => a + (Number(l.cantidad) || 0), 0)
@@ -71,7 +75,7 @@ export function CompraDetalleModal({ compra, onClose }: Props) {
   const tieneExtras = flete > 0 || descuento > 0 || iva > 0
 
   const detallePorLote = new Map(
-    mockStock
+    stockActual
       .flatMap((stock) => stock.lotesDetalle)
       .filter((detalle) => detalle.compraCodigo === compra.codigo)
       .map((detalle) => [detalle.loteId, detalle] as const),

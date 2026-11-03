@@ -271,6 +271,7 @@ export interface StockColor {
     compraCodigo: string
     fechaCompra: string
     proveedorNombre: string
+    precioUnitario: number
     rollos: number
     cantidad: number
     usadoRollos: number

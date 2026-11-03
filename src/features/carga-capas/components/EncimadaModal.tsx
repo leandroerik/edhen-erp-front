@@ -4,6 +4,7 @@ import { Money } from '../../../shared/components/Money'
 import { mockColores, mockModelos } from '../../../data/mock'
 import { uid } from '../../../utils/format'
 import { comprasDesdeStock } from '../../articulos/stockRollos'
+import { usosStockDesdeDatos } from '../../../data/mock'
 import { useErpStore } from '../../../data/erpStore'
 import type {
   CargaCapas,
@@ -161,8 +162,15 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
     return grupos
   }, [])
 
-  const { compras } = useErpStore()
-  const comprasLista = useMemo(() => comprasDesdeStock(compras), [compras])
+  const { compras, encimadas, articulos } = useErpStore()
+  const usosStock = useMemo(
+    () => usosStockDesdeDatos(encimadas, articulos),
+    [encimadas, articulos],
+  )
+  const comprasLista = useMemo(
+    () => comprasDesdeStock(compras, usosStock),
+    [compras, usosStock],
+  )
 
   const gruposStock = useMemo(() => {
     return comprasLista

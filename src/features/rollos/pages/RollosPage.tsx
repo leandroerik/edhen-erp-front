@@ -3,7 +3,7 @@ import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
 import { StockIndicator } from '../../../shared/components/StockIndicator'
 import { formatDate } from '../../../utils/format'
-import { stockDesdeCompras } from '../../../data/mock'
+import { stockDesdeCompras, usosStockDesdeDatos } from '../../../data/mock'
 import { useErpStore } from '../../../data/erpStore'
 import type { Compra, UnidadTela } from '../../../types'
 import { NuevaCompraModal } from '../components/NuevaCompraModal'
@@ -15,8 +15,12 @@ const td = 'px-3 py-2.5 text-sm text-stone-900'
 type SortField = 'fecha' | 'codigo' | 'total'
 type SortOrder = 'desc' | 'asc'
 
+function proveedorIdDesdeNombre(nombre: string) {
+  return `prov-${nombre.trim().toLowerCase().replace(/\s+/g, '-')}`
+}
+
 export function RollosPage() {
-  const { compras, addCompra } = useErpStore()
+  const { compras, encimadas, articulos, proveedores, addCompra, addProveedor } = useErpStore()
   const [open, setOpen] = useState(false)
   const [viewing, setViewing] = useState<Compra | null>(null)
   const [busqueda, setBusqueda] = useState('')
@@ -25,9 +29,14 @@ export function RollosPage() {
   const [pagina, setPagina] = useState(1)
   const [filasPorPagina, setFilasPorPagina] = useState(10)
 
+  const usosStock = useMemo(
+    () => usosStockDesdeDatos(encimadas, articulos),
+    [encimadas, articulos],
+  )
+
   const consumoPorCompra = useMemo(() => {
     const map = new Map<string, { comprado: number; usado: number; unidad: UnidadTela }>()
-    const stockActual = stockDesdeCompras(compras)
+    const stockActual = stockDesdeCompras(compras, usosStock)
     for (const stock of stockActual) {
       for (const lote of stock.lotesDetalle) {
         const actual = map.get(lote.compraCodigo)
@@ -44,7 +53,7 @@ export function RollosPage() {
       }
     }
     return map
-  }, [compras])
+  }, [compras, usosStock])
 
   const handleSort = (field: SortField) => {
     setPagina(1)
@@ -383,12 +392,22 @@ export function RollosPage() {
               cantidad: Number(l.cantidad) || 0,
               subtotal: Number(l.subtotal) || 0,
             }))
+            const proveedorNombre = (d.proveedor || '').trim() || 'Proveedor'
+            const proveedorExistente = proveedores.find(
+              (p) => p.nombre.trim().toLowerCase() === proveedorNombre.toLowerCase(),
+            )
+            const proveedorId =
+              proveedorExistente?.id ?? proveedorIdDesdeNombre(proveedorNombre)
+            if ((d.proveedor || '').trim()) {
+              addProveedor({ id: proveedorId, nombre: proveedorNombre })
+            }
+
             const nueva = {
               id: `comp-${Date.now()}`,
               codigo,
               fecha: d.fecha,
-              proveedorId: `prov-${(d.proveedor || '').toLowerCase().replace(/\s+/g, '-')}`,
-              proveedorNombre: d.proveedor,
+              proveedorId,
+              proveedorNombre,
               telaId: `tel-${(d.tela || '').toLowerCase().replace(/\s+/g, '-')}`,
               telaNombre: d.tela,
               unidadCompra: d.unidad,

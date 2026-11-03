@@ -10,7 +10,7 @@ import {
   NIVEL_STOCK_LABEL,
   type NivelStock,
 } from '../../../utils/stock'
-import { stockDesdeCompras } from '../../../data/mock'
+import { stockDesdeCompras, usosStockDesdeDatos } from '../../../data/mock'
 import { useErpStore } from '../../../data/erpStore'
 
 const th = 'px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-stone-500'
@@ -37,8 +37,15 @@ export function StockPage() {
 
   const texto = busqueda.trim().toLowerCase()
 
-  const { compras } = useErpStore()
-  const stockFuente = useMemo(() => stockDesdeCompras(compras), [compras])
+  const { compras, encimadas, articulos } = useErpStore()
+  const usosStock = useMemo(
+    () => usosStockDesdeDatos(encimadas, articulos),
+    [encimadas, articulos],
+  )
+  const stockFuente = useMemo(
+    () => stockDesdeCompras(compras, usosStock),
+    [compras, usosStock],
+  )
 
   const stockConNivel = useMemo(() => {
     return stockFuente.map((stock) => ({

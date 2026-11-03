@@ -1,5 +1,6 @@
 import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
+import { useErpStore } from '../../../data/erpStore'
 import { formatARS } from '../../../utils/format'
 import type { Articulo } from '../../../types'
 
@@ -7,6 +8,7 @@ interface Props {
   articulo: Articulo
   onClose: () => void
   onEdit: () => void
+  onDelete: () => void
 }
 
 const COLOR_SWATCH: Record<string, string> = {
@@ -30,10 +32,15 @@ const thRight = `${th} text-right`
 const td = 'px-3 py-2 text-sm text-stone-900'
 const tdRight = `${td} text-right tabular-nums`
 
-export function ArticuloDetalleModal({ articulo, onClose, onEdit }: Props) {
+export function ArticuloDetalleModal({ articulo, onClose, onEdit, onDelete }: Props) {
+  const { encimadas } = useErpStore()
   const cantidad = Math.max(1, Number(articulo.cantidadPrendas) || 0)
   const telas = articulo.telas || []
   const avios = articulo.avios || []
+  const encimada = articulo.encimadaId
+    ? encimadas.find((item) => item.id === articulo.encimadaId)
+    : undefined
+  const encimadaItem = encimada?.items.find((item) => item.id === articulo.encimadaItemId)
 
   // Telas
   const costoTelaTotal =
@@ -96,6 +103,12 @@ export function ArticuloDetalleModal({ articulo, onClose, onEdit }: Props) {
             {articulo.descripcion && (
               <p className="mt-0.5 text-xs text-stone-500">{articulo.descripcion}</p>
             )}
+            {encimada && (
+              <p className="mt-1 text-xs text-stone-500">
+                Encimada: <strong className="text-stone-700">{encimada.codigo}</strong>
+                {encimadaItem && <span> · {encimadaItem.modeloNombre}</span>}
+              </p>
+            )}
           </div>
           <button
             type="button"
@@ -110,40 +123,43 @@ export function ArticuloDetalleModal({ articulo, onClose, onEdit }: Props) {
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* 1. Resumen financiero total */}
           <div>
-            <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-              Resumen financiero ({cantidad} prendas)
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                Resumen financiero
+              </span>
+              <span className="text-xs text-stone-500">{cantidad} prendas</span>
+            </div>
             <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              {/* Costo total producción */}
-              <div className="rounded-lg border border-stone-200 bg-stone-50/50 p-3.5 shadow-sm">
-                <div className="text-xs text-stone-500">Costo total producción</div>
-                <div className="mt-1 text-xl font-bold text-stone-900">
-                  <Money value={costoTotalProduccion} />
+              {/* Venta total */}
+              <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 shadow-sm">
+                <div className="text-xs font-medium text-amber-800">Venta total</div>
+                <div className="mt-1 text-2xl font-bold text-stone-900">
+                  <Money value={ventaTotal} />
                 </div>
-                <div className="mt-0.5 text-xs text-stone-500">
-                  {formatARS(costoUnitario)} / prenda
+                <div className="mt-1 text-xs text-stone-500">
+                  {formatARS(precioVenta)} por prenda
                 </div>
               </div>
 
-              {/* Venta total */}
-              <div className="rounded-lg border border-stone-200 bg-stone-50/50 p-3.5 shadow-sm">
-                <div className="text-xs text-stone-500">Venta proyectada</div>
-                <div className="mt-1 text-xl font-bold text-stone-900">
-                  <Money value={ventaTotal} />
+              {/* Costo total producción */}
+              <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+                <div className="text-xs font-medium text-stone-500">Costo de producción</div>
+                <div className="mt-1 text-2xl font-bold text-stone-900">
+                  <Money value={costoTotalProduccion} />
                 </div>
-                <div className="mt-0.5 text-xs text-stone-500">
-                  {formatARS(precioVenta)} / prenda
+                <div className="mt-1 text-xs text-stone-500">
+                  {formatARS(costoUnitario)} por prenda
                 </div>
               </div>
 
               {/* Ganancia total */}
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3.5 shadow-sm">
-                <div className="text-xs font-medium text-emerald-800">Ganancia neta total</div>
-                <div className="mt-1 text-xl font-bold text-emerald-900">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 shadow-sm">
+                <div className="text-xs font-medium text-emerald-800">Ganancia neta</div>
+                <div className="mt-1 text-2xl font-bold text-emerald-900">
                   <Money value={gananciaTotal} />
                 </div>
-                <div className="mt-0.5 text-xs font-medium text-emerald-700">
-                  +{formatARS(gananciaUnitaria)} / prenda · {margenReal.toFixed(1)}% margen
+                <div className="mt-1 text-xs font-medium text-emerald-700">
+                  +{formatARS(gananciaUnitaria)} por prenda · {margenReal.toFixed(1)}% margen
                 </div>
               </div>
             </div>
@@ -152,49 +168,49 @@ export function ArticuloDetalleModal({ articulo, onClose, onEdit }: Props) {
           {/* 2. Desglose de Costos */}
           <div>
             <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-              Desglose de costos de fabricación
+              Composición del costo
             </span>
             <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
               {/* Costo total telas */}
-              <div className="rounded-lg border border-stone-200 bg-white p-3.5 shadow-sm">
-                <div className="text-xs font-medium text-stone-600">
+              <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+                <div className="text-xs font-medium text-stone-500">
                   Telas consumidas
                 </div>
                 <div className="mt-1 text-lg font-bold text-stone-900">
                   <Money value={costoTelaTotal} />
                 </div>
-                <div className="mt-0.5 text-xs text-stone-500">
+                <div className="mt-1 text-xs text-stone-500">
                   {formatARS(costoTelaPorPrenda)} por prenda
                 </div>
               </div>
 
               {/* Pago total talleres / mano de obra */}
-              <div className="rounded-lg border border-stone-200 bg-white p-3.5 shadow-sm">
-                <div className="text-xs font-medium text-stone-600">
-                  Taller (Mano de obra)
+              <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+                <div className="text-xs font-medium text-stone-500">
+                  Taller y mano de obra
                 </div>
                 <div className="mt-1 text-lg font-bold text-stone-900">
                   <Money value={pagoTotalTalleres} />
                 </div>
-                <div className="mt-0.5 text-xs text-stone-500">
+                <div className="mt-1 text-xs text-stone-500">
                   {formatARS(manoObraPrenda)} por prenda
                   {articulo.tallerNombre && (
                     <span className="block mt-0.5 font-medium text-amber-800">
-                      Taller: {articulo.tallerNombre}
+                      {articulo.tallerNombre}
                     </span>
                   )}
                 </div>
               </div>
 
               {/* Costo total avíos */}
-              <div className="rounded-lg border border-stone-200 bg-white p-3.5 shadow-sm">
-                <div className="text-xs font-medium text-stone-600">
+              <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+                <div className="text-xs font-medium text-stone-500">
                   Avíos e insumos
                 </div>
                 <div className="mt-1 text-lg font-bold text-stone-900">
                   <Money value={aviosTotales} />
                 </div>
-                <div className="mt-0.5 text-xs text-stone-500">
+                <div className="mt-1 text-xs text-stone-500">
                   {formatARS(aviosPorPrenda)} por prenda
                 </div>
               </div>
@@ -205,27 +221,29 @@ export function ArticuloDetalleModal({ articulo, onClose, onEdit }: Props) {
           <div>
             <div className="mb-2 flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-                Telas y rollos consumidos
+                Telas consumidas
               </span>
               <span className="text-xs text-stone-500">
-                Subtotal tela: <strong className="text-stone-900"><Money value={costoTelaTotal} /></strong>
+                {telas.length} {telas.length === 1 ? 'ítem' : 'ítems'} ·{' '}
+                <strong className="text-stone-900"><Money value={costoTelaTotal} /></strong>
               </span>
             </div>
-            <div className="overflow-hidden rounded-lg border border-stone-200">
-              <table className="w-full divide-y divide-stone-200">
+            <div className="overflow-x-auto rounded-xl border border-stone-200">
+              <table className="w-full min-w-[560px] divide-y divide-stone-200">
                 <thead className="bg-stone-50">
                   <tr>
-                    <th className={`${th} text-left`}>Tela / Color</th>
+                    <th className={`${th} text-left`}>Tela</th>
+                    <th className={`${th} text-left`}>Color</th>
                     <th className={thRight}>Rollos</th>
                     <th className={thRight}>Cantidad</th>
-                    <th className={thRight}>Precio/unidad</th>
-                    <th className={thRight}>Costo total</th>
+                    <th className={thRight}>Precio/u.</th>
+                    <th className={thRight}>Costo</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
                   {telas.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-3 py-4 text-center text-xs text-stone-400">
+                      <td colSpan={6} className="px-3 py-4 text-center text-xs text-stone-400">
                         Sin telas asignadas.
                       </td>
                     </tr>
@@ -234,18 +252,22 @@ export function ArticuloDetalleModal({ articulo, onClose, onEdit }: Props) {
                       <tr key={idx} className="hover:bg-stone-50">
                         <td className={td}>
                           <div className="flex items-center gap-1.5">
+                            <span className="font-medium text-stone-900">{t.telaNombre}</span>
+                            {t.compraCodigo && (
+                              <span className="rounded bg-stone-100 px-1 py-0.2 text-[10px] text-stone-500">
+                                {t.compraCodigo}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className={td}>
+                          <div className="flex items-center gap-1.5">
                             <span
                               className={`h-2.5 w-2.5 shrink-0 rounded-full border border-stone-300 ${
                                 COLOR_SWATCH[t.colorNombre] ?? 'bg-stone-200'
                               }`}
                             />
-                            <span className="font-medium text-stone-900">{t.telaNombre}</span>
-                            <span className="text-stone-500">· {t.colorNombre}</span>
-                            {t.compraCodigo && (
-                              <span className="ml-1 rounded bg-stone-100 px-1 py-0.2 text-[10px] text-stone-500">
-                                {t.compraCodigo}
-                              </span>
-                            )}
+                            <span className="text-stone-600">{t.colorNombre}</span>
                           </div>
                         </td>
                         <td className={tdRight}>{t.rollosUsados}</td>
@@ -271,20 +293,21 @@ export function ArticuloDetalleModal({ articulo, onClose, onEdit }: Props) {
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-                  Avíos e insumos detallados
+                  Avíos e insumos
                 </span>
                 <span className="text-xs text-stone-500">
-                  Subtotal avíos: <strong className="text-stone-900"><Money value={aviosTotales} /></strong>
+                  {avios.length} {avios.length === 1 ? 'ítem' : 'ítems'} ·{' '}
+                  <strong className="text-stone-900"><Money value={aviosTotales} /></strong>
                 </span>
               </div>
-              <div className="overflow-hidden rounded-lg border border-stone-200">
-                <table className="w-full divide-y divide-stone-200">
+              <div className="overflow-x-auto rounded-xl border border-stone-200">
+                <table className="w-full min-w-[460px] divide-y divide-stone-200">
                   <thead className="bg-stone-50">
                     <tr>
                       <th className={`${th} text-left`}>Insumo</th>
                       <th className={`${th} text-left`}>Tipo</th>
-                      <th className={thRight}>Monto unitario</th>
-                      <th className={thRight}>Costo total</th>
+                      <th className={thRight}>Monto</th>
+                      <th className={thRight}>Costo</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">
@@ -293,10 +316,18 @@ export function ArticuloDetalleModal({ articulo, onClose, onEdit }: Props) {
                       const monto = Number(av.monto) || 0
                       const totalAvio = porPrenda ? monto * cantidad : monto
                       return (
-                        <tr key={idx}>
+                        <tr key={idx} className="hover:bg-stone-50">
                           <td className={`${td} font-medium text-stone-900`}>{av.nombre}</td>
-                          <td className={`${td} text-xs text-stone-500`}>
-                            {porPrenda ? 'Por prenda' : 'Costo fijo lote'}
+                          <td className={td}>
+                            <span
+                              className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                                porPrenda
+                                  ? 'border-stone-200 bg-stone-50 text-stone-600'
+                                  : 'border-amber-200 bg-amber-50 text-amber-800'
+                              }`}
+                            >
+                              {porPrenda ? 'Por prenda' : 'Fijo lote'}
+                            </span>
                           </td>
                           <td className={tdRight}>
                             <Money value={monto} /> {porPrenda ? '/ un.' : ''}
@@ -320,6 +351,9 @@ export function ArticuloDetalleModal({ articulo, onClose, onEdit }: Props) {
             {cantidad} prendas · Margen real: <strong className="text-emerald-700">{margenReal.toFixed(1)}%</strong>
           </div>
           <div className="flex gap-2">
+            <Button variant="danger" onClick={onDelete}>
+              Eliminar
+            </Button>
             <Button variant="secondary" onClick={onClose}>
               Cerrar
             </Button>

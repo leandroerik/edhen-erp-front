@@ -37,7 +37,8 @@ function inicializarHojas() {
         'costoTelaTotalUsado', 'costoTelaPorPrenda', 'manoObra',
         'aviosTotales', 'aviosPorPrenda', 'costoUnitario', 'costoTotalProduccion',
         'margenGanancia', 'precioSugerido', 'precioVenta', 'gananciaUnitaria',
-        'gananciaTotal', 'margenReal', 'telas_json', 'avios_json', 'corteId', 'tallerId', 'tallerNombre'
+        'gananciaTotal', 'margenReal', 'telas_json', 'avios_json', 'corteId', 'tallerId', 'tallerNombre',
+        'encimadaId', 'encimadaItemId'
       ]
     },
     {
@@ -90,14 +91,68 @@ function inicializarHojas() {
     if (!sheet) {
       sheet = ss.insertSheet(e.nombre)
     }
+
     if (sheet.getLastRow() === 0) {
       sheet.appendRow(e.columnas)
       sheet.getRange(1, 1, 1, e.columnas.length).setFontWeight('bold').setBackground('#f3f4f6')
       sheet.setFrozenRows(1)
+      return
+    }
+
+    // Las hojas ya existentes no se tocan: solo se agregan al final las
+    // columnas del esquema que falten (por ejemplo encimadaId/encimadaItemId).
+    const lastCol = sheet.getLastColumn()
+    const headers = lastCol > 0
+      ? sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim() })
+      : []
+    const faltantes = e.columnas.filter(function (col) {
+      return headers.indexOf(col) === -1
+    })
+
+    if (faltantes.length > 0) {
+      sheet.getRange(1, lastCol + 1, 1, faltantes.length)
+        .setValues([faltantes])
+        .setFontWeight('bold')
+        .setBackground('#f3f4f6')
+      Logger.log('Se agregaron columnas a ' + e.nombre + ': ' + faltantes.join(', '))
+    }
+
+    if (e.nombre === SHEETS.ARTICULOS) {
+      limpiarCorteIdEncimadas(sheet)
     }
   })
 
   Logger.log('Hojas inicializadas con éxito.')
+}
+
+/**
+ * La relación Artículo -> Encimada se guarda en encimadaId/encimadaItemId.
+ * Si en la columna corteId quedaron valores tipo "enc-xx", se limpian.
+ */
+function limpiarCorteIdEncimadas(sheet) {
+  const lastRow = sheet.getLastRow()
+  if (lastRow <= 1) return
+
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
+  const corteIdIdx = headers.indexOf('corteId')
+  if (corteIdIdx === -1) return
+
+  const range = sheet.getRange(2, corteIdIdx + 1, lastRow - 1, 1)
+  const values = range.getValues()
+  let limpiados = 0
+  const nuevas = values.map(function (fila) {
+    const valor = String(fila[0] || '').trim()
+    if (/^enc[-_]/i.test(valor)) {
+      limpiados++
+      return ['']
+    }
+    return fila
+  })
+
+  if (limpiados > 0) {
+    range.setValues(nuevas)
+    Logger.log('Se limpiaron ' + limpiados + ' valores de encimada en corteId de Articulos.')
+  }
 }
 
 /**
@@ -171,6 +226,9 @@ function doPost(e) {
     switch (action) {
       case 'guardarArticulo':
         resultado = upsertFila(SHEETS.ARTICULOS, payload)
+        break
+      case 'eliminarArticulo':
+        resultado = eliminarFila(SHEETS.ARTICULOS, payload.id)
         break
       case 'guardarCorte':
         resultado = upsertFila(SHEETS.CORTES, payload)
@@ -312,6 +370,29 @@ function upsertFila(nombreHoja, registro) {
   }
 
   return registro
+}
+
+function eliminarFila(nombreHoja, id) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet()
+  const sheet = ss.getSheetByName(nombreHoja)
+  if (!sheet) throw new Error('Hoja no encontrada: ' + nombreHoja)
+
+  const lastRow = sheet.getLastRow()
+  if (lastRow <= 1) return { id: id, eliminado: false }
+
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
+  const idColIdx = headers.indexOf('id')
+  if (idColIdx === -1) throw new Error('Columna id no encontrada en ' + nombreHoja)
+
+  const ids = sheet.getRange(2, idColIdx + 1, lastRow - 1, 1).getValues()
+  for (let i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]) === String(id)) {
+      sheet.deleteRow(i + 2)
+      return { id: id, eliminado: true }
+    }
+  }
+
+  return { id: id, eliminado: false }
 }
 
 function actualizarCampo(nombreHoja, id, campo, valor) {

@@ -1,8 +1,11 @@
 import { useState, useMemo } from 'react'
 import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
-import { COMPRAS_ROLLOS, comprasDesdeStock } from '../stockRollos'
+import { comprasDesdeStock } from '../stockRollos'
+import type { OpcionRollo } from '../stockRollos'
+import { usosStockDesdeDatos } from '../../../data/mock'
 import { useErpStore } from '../../../data/erpStore'
+import { formatARS } from '../../../utils/format'
 import type { Articulo, AvioArticulo, UnidadTela } from '../../../types'
 
 interface Props {
@@ -72,11 +75,11 @@ const numberInputCls =
   'h-8 w-24 rounded border border-stone-300 bg-white px-2 text-center text-sm font-semibold text-stone-900 focus:border-amber-600 focus:outline-none'
 const labelCls = 'mb-1 block text-xs font-medium text-stone-500'
 
-function telasIniciales(articulo?: Articulo | null): TelaLine[] {
+function telasIniciales(articulo: Articulo | null | undefined, opciones: OpcionRollo[]): TelaLine[] {
   if (!articulo?.telas) return []
   return articulo.telas.map((t, idx) => {
-    // Buscar en COMPRAS_ROLLOS para conocer el stock real disponible del color
-    const opcionStock = COMPRAS_ROLLOS.flatMap((c) => c.opciones).find(
+    // Buscar en el stock actual para conocer disponibilidad y datos del lote
+    const opcionStock = opciones.find(
       (op) =>
         (t.stockKey && op.stockKey === t.stockKey) ||
         (t.compraCodigo &&
@@ -127,6 +130,20 @@ function aviosIniciales(articulo?: Articulo | null): AvioLine[] {
 }
 
 export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Props) {
+  const { compras, encimadas, articulos } = useErpStore()
+  const usosStock = useMemo(
+    () => usosStockDesdeDatos(encimadas, articulos),
+    [encimadas, articulos],
+  )
+  const comprasLista = useMemo(
+    () => comprasDesdeStock(compras, usosStock),
+    [compras, usosStock],
+  )
+  const opcionesStock = useMemo(
+    () => comprasLista.flatMap((c) => c.opciones),
+    [comprasLista],
+  )
+
   const [codigoArticulo, setCodigoArticulo] = useState(
     articulo?.codigoArticulo || codigoSugerido,
   )
@@ -136,7 +153,7 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
     articulo ? Number(articulo.cantidadPrendas) || 0 : 12,
   )
 
-  const [telas, setTelas] = useState<TelaLine[]>(() => telasIniciales(articulo))
+  const [telas, setTelas] = useState<TelaLine[]>(() => telasIniciales(articulo, opcionesStock))
   const [selectedRolloKey, setSelectedRolloKey] = useState('')
   const [manoObra, setManoObra] = useState<number>(
     articulo ? Number(articulo.manoObra) || 0 : 0,
@@ -149,6 +166,8 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
     articulo ? Number(articulo.precioVenta) || 0 : 0,
   )
   const [precioManual, setPrecioManual] = useState(!!articulo?.precioVenta)
+  const [encimadaId, setEncimadaId] = useState(articulo?.encimadaId || '')
+  const [encimadaItemId, setEncimadaItemId] = useState(articulo?.encimadaItemId || '')
 
   // Estados para agregar un rollo custom (sin stock previo)
   const [mostrarFormCustom, setMostrarFormCustom] = useState(false)
@@ -160,8 +179,26 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
   const [customCantidad, setCustomCantidad] = useState<number>(0)
   const [customProveedor, setCustomProveedor] = useState('')
 
-  const { compras } = useErpStore()
-  const comprasLista = useMemo(() => comprasDesdeStock(compras), [compras])
+  const encimadaSeleccionada = encimadas.find((encimada) => encimada.id === encimadaId)
+  const itemsEncimada = encimadaSeleccionada?.items ?? []
+
+  const handleEncimadaChange = (id: string) => {
+    setEncimadaId(id)
+    if (!id) {
+      setEncimadaItemId('')
+      return
+    }
+    const encimada = encimadas.find((item) => item.id === id)
+    if (!encimada) {
+      setEncimadaItemId('')
+      return
+    }
+    const itemActual = encimada.items.find((item) => item.id === encimadaItemId)
+    const itemMismoNombre = encimada.items.find(
+      (item) => item.modeloNombre.trim().toLowerCase() === nombre.trim().toLowerCase(),
+    )
+    setEncimadaItemId(itemActual?.id ?? itemMismoNombre?.id ?? encimada.items[0]?.id ?? '')
+  }
 
   // Opciones de rollos agrupadas por compra exactamente como en EncimadaModal
   const gruposStock = useMemo(() => {
@@ -176,10 +213,6 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
       }))
       .filter((compra) => compra.opciones.length > 0)
   }, [comprasLista, telas])
-
-  const opcionesStock = useMemo(() => {
-    return comprasLista.flatMap((c) => c.opciones)
-  }, [comprasLista])
 
   const cantPrendas = Math.max(0, Number(cantidadPrendas) || 0)
 
@@ -223,6 +256,43 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
   const costoTelaTotal = telasCalculadas.reduce((a, t) => a + t.costoUsado, 0)
   const rollosTotales = telasCalculadas.reduce((a, t) => a + t.rollosUsados, 0)
   const costoTelaPorPrenda = cantPrendas > 0 ? Math.round(costoTelaTotal / cantPrendas) : 0
+
+  const precioActualTela = (tela: {
+    telaNombre: string
+    colorNombre: string
+    compraCodigo?: string
+  }) => {
+    if (tela.compraCodigo === 'CUSTOM') return undefined
+    const telaNombre = tela.telaNombre.trim().toLowerCase()
+    const colorNombre = tela.colorNombre.trim().toLowerCase()
+    let masReciente: OpcionRollo | undefined
+    for (const opcion of opcionesStock) {
+      if (opcion.telaNombre.trim().toLowerCase() !== telaNombre) continue
+      if (opcion.colorNombre.trim().toLowerCase() !== colorNombre) continue
+      if (
+        !masReciente ||
+        String(opcion.compraFecha) > String(masReciente.compraFecha)
+      ) {
+        masReciente = opcion
+      }
+    }
+    return masReciente && masReciente.precioUnitario > 0
+      ? masReciente.precioUnitario
+      : undefined
+  }
+
+  const telasConCambio = telasCalculadas.filter((tela) => {
+    const precioActual = precioActualTela(tela)
+    return (
+      typeof precioActual === 'number' &&
+      Math.abs(precioActual - tela.precioUnitario) > 0.5
+    )
+  })
+
+  const costoConPreciosActuales = telasCalculadas.reduce((total, tela) => {
+    const precioActual = precioActualTela(tela) ?? tela.precioUnitario
+    return total + Math.round(tela.cantidadUsada * precioActual)
+  }, 0)
 
   // Cálculos de avíos
   const aviosValidos = avios.filter((a) => a.nombre.trim() || Number(a.monto) > 0)
@@ -341,6 +411,35 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
     setTelas((prev) => prev.filter((t) => t.id !== id))
   }
 
+  const handleRecalcularPrecios = () => {
+    if (telasConCambio.length === 0) {
+      window.alert('Los precios de las telas ya están actualizados con la última compra.')
+      return
+    }
+
+    const mensaje = [
+      '¿Actualizar los precios de tela con la última compra de cada tela/color?',
+      '',
+      `Costo de tela actual: ${formatARS(costoTelaTotal)}`,
+      `Costo de tela nuevo: ${formatARS(costoConPreciosActuales)}`,
+      '',
+      precioManual
+        ? 'El precio de venta es manual y no se modifica. Usá "Sugerido" si querés recalcularlo con el margen actual.'
+        : 'El precio de venta se recalculará automáticamente con el margen actual.',
+    ].join('\n')
+
+    if (!window.confirm(mensaje)) return
+
+    setTelas((prev) =>
+      prev.map((tela) => {
+        const precioActual = precioActualTela(tela)
+        return typeof precioActual === 'number' && precioActual > 0
+          ? { ...tela, precioUnitario: precioActual }
+          : tela
+      }),
+    )
+  }
+
   // Manejo de avíos
   const addAvio = () => {
     setAvios((prev) => [
@@ -382,7 +481,9 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
     }))
 
     const payload = {
-      ...(articulo ? { id: articulo.id, encimadaId: articulo.encimadaId, encimadaItemId: articulo.encimadaItemId, corteId: articulo.corteId } : {}),
+      ...(articulo ? { id: articulo.id, corteId: articulo.corteId } : {}),
+      encimadaId: encimadaId || undefined,
+      encimadaItemId: encimadaId ? encimadaItemId || undefined : undefined,
       codigoArticulo: codigoArticulo.trim() || codigoSugerido,
       nombre: nombre.trim() || descripcion.trim() || 'Artículo',
       descripcion: descripcion.trim(),
@@ -413,10 +514,16 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
   const telasValidas = telasCalculadas.every(
     (t) => t.rollosUsados > 0 && t.rollosUsados <= t.disponibleRollos,
   )
+  const encimadaValida =
+    !encimadaId ||
+    !encimadaSeleccionada ||
+    itemsEncimada.length === 0 ||
+    Boolean(encimadaItemId)
   const puedeGuardar =
     cantPrendas > 0 &&
     (nombre.trim().length > 0 || descripcion.trim().length > 0) &&
-    telasValidas
+    telasValidas &&
+    encimadaValida
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4">
@@ -489,6 +596,60 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
 
         {/* Cuerpo del formulario */}
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {!articulo && (
+            <div className="rounded-lg border border-stone-200 bg-white p-3.5 shadow-sm">
+              <div className="mb-2.5">
+                <span className="text-xs font-semibold uppercase tracking-wide text-stone-700">
+                  Encimada de origen (opcional)
+                </span>
+                <p className="mt-0.5 text-xs text-stone-500">
+                  Solo para artículos creados manualmente. Los artículos generados desde carga
+                  de capas ya quedan asociados automáticamente.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className={labelCls}>Encimada</label>
+                  <select
+                    className={inputCls}
+                    value={encimadaId}
+                    onChange={(e) => handleEncimadaChange(e.target.value)}
+                  >
+                    <option value="">Sin asociar</option>
+                    {encimadas.map((encimada) => (
+                      <option key={encimada.id} value={encimada.id}>
+                        {encimada.codigo} · {encimada.items.length}{' '}
+                        {encimada.items.length === 1 ? 'modelo' : 'modelos'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Modelo de la encimada</label>
+                  <select
+                    className={inputCls}
+                    value={encimadaItemId}
+                    disabled={!encimadaSeleccionada || itemsEncimada.length === 0}
+                    onChange={(e) => setEncimadaItemId(e.target.value)}
+                  >
+                    <option value="">
+                      {!encimadaSeleccionada
+                        ? 'Elegí una encimada'
+                        : itemsEncimada.length === 0
+                          ? 'La encimada no tiene modelos'
+                          : 'Seleccionar modelo'}
+                    </option>
+                    {itemsEncimada.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.modeloNombre} · {item.cantidad} u/capa
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* 2. Telas del stock agrupadas por compra con chips de color (como EncimadaModal) */}
           <div className="rounded-lg border border-stone-200 bg-white p-3.5 shadow-sm">
             <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
@@ -500,11 +661,34 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
                   {telasCalculadas.length} {telasCalculadas.length === 1 ? 'color' : 'colores'} · {rollosTotales} {rollosTotales === 1 ? 'rollo' : 'rollos'}
                 </span>
               </div>
-              <div className="text-xs text-stone-600">
-                Total tela: <strong className="text-stone-900"><Money value={costoTelaTotal} /></strong>
-                {cantPrendas > 0 && (
-                  <span className="text-stone-500 font-medium"> (<Money value={costoTelaPorPrenda} /> / prenda)</span>
+              <div className="flex flex-wrap items-center gap-3">
+                {articulo && (
+                  <button
+                    type="button"
+                    onClick={handleRecalcularPrecios}
+                    disabled={telasConCambio.length === 0}
+                    title={
+                      telasConCambio.length > 0
+                        ? 'Compara con la última compra de cada tela/color'
+                        : 'Los precios coinciden con la última compra'
+                    }
+                    className={`rounded-md border px-2.5 py-1 text-[11px] font-medium transition ${
+                      telasConCambio.length > 0
+                        ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'
+                        : 'cursor-default border-stone-200 bg-stone-50 text-stone-400'
+                    }`}
+                  >
+                    {telasConCambio.length > 0
+                      ? `Actualizar precios (${telasConCambio.length})`
+                      : 'Precios al día'}
+                  </button>
                 )}
+                <div className="text-xs text-stone-600">
+                  Total tela: <strong className="text-stone-900"><Money value={costoTelaTotal} /></strong>
+                  {cantPrendas > 0 && (
+                    <span className="text-stone-500 font-medium"> (<Money value={costoTelaPorPrenda} /> / prenda)</span>
+                  )}
+                </div>
               </div>
             </div>
 

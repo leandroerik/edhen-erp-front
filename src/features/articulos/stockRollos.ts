@@ -1,4 +1,5 @@
 import { mockStock, stockDesdeCompras } from '../../data/mock'
+import type { UsoLoteStock } from '../../data/mock'
 import type { Compra, UnidadTela } from '../../types'
 
 export interface OpcionRollo {
@@ -25,9 +26,12 @@ export interface CompraRollos {
   opciones: OpcionRollo[]
 }
 
-export function comprasDesdeStock(comprasPersonalizadas?: Compra[]): CompraRollos[] {
+export function comprasDesdeStock(
+  comprasPersonalizadas?: Compra[],
+  usos?: UsoLoteStock[],
+): CompraRollos[] {
   const stockFuente = comprasPersonalizadas && comprasPersonalizadas.length > 0
-    ? stockDesdeCompras(comprasPersonalizadas)
+    ? stockDesdeCompras(comprasPersonalizadas, usos)
     : mockStock
   const compras = new Map<string, CompraRollos>()
 
@@ -46,7 +50,7 @@ export function comprasDesdeStock(comprasPersonalizadas?: Compra[]): CompraRollo
         colorId: stock.colorId,
         colorNombre: stock.colorNombre,
         unidad: stock.unidad,
-        precioUnitario: Number(stock.precioUnitario) || 0,
+        precioUnitario: Number(lote.precioUnitario ?? stock.precioUnitario) || 0,
         rollosDisponibles: Math.max(0, lote.rollos - (lote.usadoRollos || 0)),
         cantidadDisponible: Math.max(0, lote.cantidad - (lote.usadoCantidad || 0)),
       }

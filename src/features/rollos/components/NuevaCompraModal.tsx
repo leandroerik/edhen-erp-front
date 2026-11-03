@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
-import { mockProveedores, mockTelas, mockColores } from '../../../data/mock'
+import { mockTelas, mockColores } from '../../../data/mock'
+import { useErpStore } from '../../../data/erpStore'
 import type { LoteColor, UnidadTela } from '../../../types'
 
 interface Props {
@@ -31,8 +32,21 @@ function newLote(): LoteColor {
 }
 
 export function NuevaCompraModal({ open, onClose, onSave }: Props) {
+  const { proveedores, compras } = useErpStore()
+  const proveedoresSugeridos = (() => {
+    const mapa = new Map<string, string>()
+    for (const p of proveedores) {
+      const nombre = p.nombre.trim()
+      if (nombre) mapa.set(nombre.toLowerCase(), nombre)
+    }
+    for (const compra of compras) {
+      const nombre = (compra.proveedorNombre || '').trim()
+      if (nombre) mapa.set(nombre.toLowerCase(), nombre)
+    }
+    return Array.from(mapa.entries()).map(([id, nombre]) => ({ id, nombre }))
+  })()
   const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10))
-  const [proveedor, setProveedor] = useState(mockProveedores[0]?.nombre || '')
+  const [proveedor, setProveedor] = useState(proveedoresSugeridos[0]?.nombre || '')
   const [tela, setTela] = useState(mockTelas[0]?.nombre || '')
   const [unidad, setUnidad] = useState<UnidadTela>('METRO')
   const [precioUnitario, setPrecioUnitario] = useState<number>(0)
@@ -151,10 +165,13 @@ export function NuevaCompraModal({ open, onClose, onSave }: Props) {
                 placeholder="Proveedor"
               />
               <datalist id="proveedores-compra">
-                {mockProveedores.map((p) => (
+                {proveedoresSugeridos.map((p) => (
                   <option key={p.id} value={p.nombre} />
                 ))}
               </datalist>
+              <p className="mt-0.5 text-[10px] leading-tight text-stone-400">
+                Si escribís uno nuevo, se guarda al confirmar la compra.
+              </p>
             </div>
 
             <div>

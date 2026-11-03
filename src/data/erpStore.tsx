@@ -6,6 +6,7 @@ import {
   mockEncimadas,
   mockModelos,
   mockPagos,
+  mockProveedores,
   mockTalleres,
 } from './mock'
 import type {
@@ -18,6 +19,7 @@ import type {
   EstadoCorte,
   Modelo,
   PagoTaller,
+  Proveedor,
   Taller,
   TelaArticulo,
 } from '../types'
@@ -32,6 +34,7 @@ interface StoredData {
   pagos?: PagoTaller[]
   compras?: Compra[]
   talleres?: Taller[]
+  proveedores?: Proveedor[]
 }
 
 function loadInitialData(): StoredData {
@@ -61,9 +64,12 @@ interface ErpStore {
   pagos: PagoTaller[]
   compras: Compra[]
   talleres: Taller[]
+  proveedores: Proveedor[]
   addCompra: (compra: Compra) => void
+  addProveedor: (proveedor: Proveedor) => void
   addArticulo: (articulo: Articulo) => void
   updateArticulo: (articulo: Articulo) => void
+  deleteArticulo: (articuloId: string) => void
   saveEncimada: (encimada: Encimada) => void
   addCorte: (corte: Corte) => void
   updateCorte: (corte: Corte) => void
@@ -83,6 +89,7 @@ interface ErpStore {
     pagos?: PagoTaller[]
     compras?: Compra[]
     talleres?: Taller[]
+    proveedores?: Proveedor[]
   }) => void
 }
 
@@ -223,6 +230,9 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
   const [pagos, setPagos] = useState<PagoTaller[]>(initial.pagos || mockPagos)
   const [compras, setCompras] = useState<Compra[]>(initial.compras || mockCompras)
   const [talleres, setTalleres] = useState<Taller[]>(initial.talleres || mockTalleres)
+  const [proveedores, setProveedores] = useState<Proveedor[]>(
+    initial.proveedores || mockProveedores,
+  )
   const [sincronizando, setSincronizando] = useState(false)
   const [ultimoSync, setUltimoSync] = useState<Date | null>(null)
 
@@ -235,8 +245,9 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
       pagos,
       compras,
       talleres,
+      proveedores,
     })
-  }, [articulos, encimadas, cortes, pagos, compras, talleres])
+  }, [articulos, encimadas, cortes, pagos, compras, talleres, proveedores])
 
   // Función de sincronización con Google Sheets (trae lo último cargado en Sheets)
   const sincronizarConSheets = async (): Promise<{
@@ -281,6 +292,10 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
         setTalleres(data.talleres)
         counts.talleres = data.talleres.length
       }
+      if (Array.isArray(data.proveedores)) {
+        setProveedores(data.proveedores)
+        counts.proveedores = data.proveedores.length
+      }
 
       saveStoreData({
         articulos: data.articulos || articulos,
@@ -289,6 +304,7 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
         pagos: data.pagos || pagos,
         compras: data.compras || compras,
         talleres: data.talleres || talleres,
+        proveedores: data.proveedores || proveedores,
       })
 
       const now = new Date()
@@ -331,6 +347,9 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
       if (Array.isArray(data.talleres) && data.talleres.length > 0) {
         setTalleres(data.talleres)
       }
+      if (Array.isArray(data.proveedores) && data.proveedores.length > 0) {
+        setProveedores(data.proveedores)
+      }
       setUltimoSync(new Date())
     })
   }, [])
@@ -339,6 +358,7 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
     setArticulos(mockArticulos)
     setCompras(mockCompras)
     setTalleres(mockTalleres)
+    setProveedores(mockProveedores)
     setCortes(mockCortes)
     setEncimadas(mockEncimadas)
     setPagos(mockPagos)
@@ -351,6 +371,7 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
     setArticulos([])
     setCompras([])
     setTalleres([])
+    setProveedores([])
     setCortes([])
     setEncimadas([])
     setPagos([])
@@ -361,6 +382,7 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
           articulos: [],
           compras: [],
           talleres: [],
+          proveedores: [],
           cortes: [],
           encimadas: [],
           pagos: [],
@@ -372,6 +394,19 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
   const addCompra = (compra: Compra) => {
     setCompras((prev) => [compra, ...prev])
     postGasAction('guardarCompra', compra)
+  }
+
+  const addProveedor = (proveedor: Proveedor) => {
+    const nombre = proveedor.nombre.trim()
+    if (!nombre) return
+    const existente = proveedores.find(
+      (item) => item.nombre.trim().toLowerCase() === nombre.toLowerCase(),
+    )
+    if (existente) return
+
+    const nuevo = { ...proveedor, nombre }
+    setProveedores((prev) => [...prev, nuevo])
+    postGasAction('guardarProveedor', nuevo)
   }
 
   const addArticulo = (articulo: Articulo) => {
@@ -455,6 +490,11 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
     )
   }
 
+  const deleteArticulo = (articuloId: string) => {
+    setArticulos((prev) => prev.filter((articulo) => articulo.id !== articuloId))
+    postGasAction('eliminarArticulo', { id: articuloId })
+  }
+
   const addCorte = (corte: Corte) => {
     setCortes((prev) => [corte, ...prev])
     postGasAction('guardarCorte', corte)
@@ -532,6 +572,7 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
     pagos?: PagoTaller[]
     compras?: Compra[]
     talleres?: Taller[]
+    proveedores?: Proveedor[]
   }) => {
     if (datos.articulos) setArticulos(datos.articulos)
     if (datos.cortes) setCortes(datos.cortes)
@@ -539,6 +580,7 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
     if (datos.pagos) setPagos(datos.pagos)
     if (datos.compras) setCompras(datos.compras)
     if (datos.talleres) setTalleres(datos.talleres)
+    if (datos.proveedores) setProveedores(datos.proveedores)
   }
 
   const saveEncimada = (encimada: Encimada) => {
@@ -580,9 +622,12 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
         pagos,
         compras,
         talleres,
+        proveedores,
         addCompra,
+        addProveedor,
         addArticulo,
         updateArticulo,
+        deleteArticulo,
         saveEncimada,
         addCorte,
         updateCorte,

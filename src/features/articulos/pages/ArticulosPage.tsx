@@ -21,7 +21,7 @@ const td = 'px-4 py-2.5 text-sm text-stone-900'
 const tdRight = `${td} text-right tabular-nums`
 
 export function ArticulosPage() {
-  const { articulos, addArticulo, updateArticulo } = useErpStore()
+  const { articulos, addArticulo, updateArticulo, deleteArticulo } = useErpStore()
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Articulo | null>(null)
   const [viewing, setViewing] = useState<Articulo | null>(null)
@@ -85,6 +85,20 @@ export function ArticulosPage() {
   const handleSearchChange = (value: string) => {
     setBusqueda(value)
     setPage(1)
+  }
+
+  const handleDelete = (articulo: Articulo) => {
+    const nombre = articulo.nombre || articulo.descripcion || articulo.codigoArticulo
+    if (
+      !window.confirm(
+        `¿Eliminar el artículo ${articulo.codigoArticulo} · ${nombre}? Esta acción no se puede deshacer.`,
+      )
+    ) {
+      return
+    }
+    deleteArticulo(articulo.id)
+    if (viewing?.id === articulo.id) setViewing(null)
+    if (editing?.id === articulo.id) setEditing(null)
   }
 
   return (
@@ -252,6 +266,13 @@ export function ArticulosPage() {
                         >
                           Editar
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(a)}
+                          className="rounded px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50"
+                        >
+                          Eliminar
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -286,6 +307,7 @@ export function ArticulosPage() {
             setViewing(null)
             setEditing(art)
           }}
+          onDelete={() => handleDelete(viewing)}
         />
       )}
 
