@@ -22,6 +22,7 @@ function App() {
         <Route path="/talleres" element={<TalleresPage />} />
         <Route path="/pagos" element={<PagosPage />} />
         <Route path="/ajustes" element={<AjustesPage />} />
+        <Route path="*" element={<Navigate to="/stock" replace />} />
       </Routes>
     </MainLayout>
   )

@@ -7,7 +7,7 @@ import { ErpStoreProvider } from './data/erpStore'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <ErpStoreProvider>
         <App />
       </ErpStoreProvider>
