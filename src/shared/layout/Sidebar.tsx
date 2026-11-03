@@ -14,7 +14,11 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <aside className="flex h-full w-56 shrink-0 flex-col border-r border-stone-200 bg-stone-50">
       <Link to="/stock" onClick={onNavigate} className="px-4 py-5">
-        <img src={`${import.meta.env.BASE_URL}logo.png`} alt="edhen" className="h-6 w-auto" />
+        <img
+          src={`${import.meta.env.BASE_URL}logo.png`}
+          alt="edhen"
+          className="h-6 w-auto"
+        />
       </Link>
       <nav className="flex flex-1 flex-col gap-1 px-2">
         {navItems.map((item) => (
