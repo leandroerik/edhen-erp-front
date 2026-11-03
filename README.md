@@ -1,8 +1,13 @@
-<<<<<<< HEAD
-=======
+
 # 🛍️ edhen POS — Sistema de Punto de Venta & Gestión de Stock
 
 Sistema integral de punto de venta (POS), control de inventario, gestión de clientes, logística y configuración para tienda de indumentaria **edhen**.
+
+## 🔗 Links
+
+- **App en producción:** [https://leandroerik.github.io/edhen-erp-front/](https://leandroerik.github.io/edhen-erp-front/)
+- **Repositorio:** [https://github.com/leandroerik/edhen-erp-front](https://github.com/leandroerik/edhen-erp-front)
+
 
 ---
 
@@ -64,5 +69,4 @@ npm run dev
 - **Backend**: Java 21, Spring Boot 3.4.3, Spring Data JPA, Flyway, OpenPDF, ZXing, H2 / PostgreSQL.
 - **Frontend**: React 19, TypeScript, Vite 8, TailwindCSS v4, React Router 7, Axios, Lucide Icons.
 - **Distribución**: Ejecutable local empaquetado mediante scripts PowerShell.
->>>>>>> 65d4de0272d0cec8045a16bd93622f45af8b35e8
-# edhen-erp-front
+
