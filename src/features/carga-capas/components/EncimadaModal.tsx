@@ -106,15 +106,6 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
   )
   const [selectedRolloKey, setSelectedRolloKey] = useState('')
 
-  // Estados para rollo custom en Encimada
-  const [mostrarFormCustom, setMostrarFormCustom] = useState(false)
-  const [customTela, setCustomTela] = useState('')
-  const [customColor, setCustomColor] = useState('')
-  const [customUnidad, setCustomUnidad] = useState<'METRO' | 'KILO'>('METRO')
-  const [customPrecio, setCustomPrecio] = useState<number>(0)
-  const [customRollos, setCustomRollos] = useState<number>(1)
-  const [customCantidad, setCustomCantidad] = useState<number>(0)
-  const [customProveedor, setCustomProveedor] = useState('')
 
   const [items, setItems] = useState<EncimadaItem[]>(() => {
     if (encimada?.items && encimada.items.length > 0) {
@@ -239,57 +230,7 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
     })
   }
 
-  const handleAgregarRolloCustom = () => {
-    if (!customTela.trim() || !customColor.trim()) return
 
-    const rollosNum = Math.max(1, Number(customRollos) || 1)
-    const cantidadTotal = Number(customCantidad) > 0 ? Number(customCantidad) : rollosNum * 20
-    const precio = Math.max(0, Number(customPrecio) || 0)
-    const customKey = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-
-    const nuevaTela: TelaUsadaEncimada = {
-      id: uid('tue'),
-      stockKey: customKey,
-      compraCodigo: 'CUSTOM',
-      compraFecha: new Date().toISOString().slice(0, 10),
-      proveedorNombre: customProveedor.trim() || 'Rollo custom (sin stock)',
-      telaId: customKey,
-      telaNombre: customTela.trim(),
-      colorId: `col-${customColor.trim().toLowerCase().replace(/\s+/g, '-')}`,
-      colorNombre: customColor.trim(),
-      unidad: customUnidad,
-      precioUnitario: precio,
-      rollosDisponibles: rollosNum,
-      cantidadDisponible: cantidadTotal,
-      rollosUsados: rollosNum,
-      cantidadUsada: cantidadTotal,
-      costoUsado: Math.round(cantidadTotal * precio),
-    }
-
-    setTelasUsadas((prev) => [...prev, nuevaTela])
-
-    // Agregar a capas si no existe
-    setFilas((prev) => {
-      const existe = prev.some(
-        (f) => f.color.trim().toLowerCase() === customColor.trim().toLowerCase(),
-      )
-      if (!existe) {
-        if (prev.length === 1 && !prev[0].color.trim()) {
-          return [{ id: prev[0].id, color: customColor.trim(), capas: prev[0].capas || 0 }]
-        }
-        return [...prev, { id: uid('fila'), color: customColor.trim(), capas: 0 }]
-      }
-      return prev
-    })
-
-    setCustomTela('')
-    setCustomColor('')
-    setCustomPrecio(0)
-    setCustomCantidad(0)
-    setCustomRollos(1)
-    setCustomProveedor('')
-    setMostrarFormCustom(false)
-  }
 
   const updateTelaRollos = (id: string, rawVal: number | string) => {
     setTelasUsadas((prev) =>
@@ -592,9 +533,8 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
                                 className="flex items-center gap-1.5 rounded-full border border-stone-200 bg-white py-1 pl-2.5 pr-1.5 shadow-sm"
                               >
                                 <span
-                                  className={`h-2.5 w-2.5 shrink-0 rounded-full border border-stone-300 ${
-                                    COLOR_SWATCH[tela.colorNombre] ?? 'bg-stone-200'
-                                  }`}
+                                  className={`h-2.5 w-2.5 shrink-0 rounded-full border border-stone-300 ${COLOR_SWATCH[tela.colorNombre] ?? 'bg-stone-200'
+                                    }`}
                                 />
                                 <span className="text-xs font-semibold text-stone-800">
                                   {tela.colorNombre}
@@ -642,11 +582,10 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
                                   </span>
                                 </div>
                                 <span
-                                  className={`rounded px-1.5 py-0.5 text-[9px] font-medium ${
-                                    esTodo
-                                      ? 'bg-emerald-50 text-emerald-700'
-                                      : 'bg-stone-100 text-stone-600'
-                                  }`}
+                                  className={`rounded px-1.5 py-0.5 text-[9px] font-medium ${esTodo
+                                    ? 'bg-emerald-50 text-emerald-700'
+                                    : 'bg-stone-100 text-stone-600'
+                                    }`}
                                 >
                                   {esTodo ? 'Todo' : `Quedan ${quedan}`}
                                 </span>
