@@ -69,6 +69,8 @@ interface ErpStore {
   proveedores: Proveedor[]
   addCompra: (compra: Compra) => void
   addProveedor: (proveedor: Proveedor) => void
+  saveTaller: (taller: Taller) => void
+  deleteTaller: (tallerId: string) => void
   addArticulo: (articulo: Articulo) => void
   updateArticulo: (articulo: Articulo) => void
   deleteArticulo: (articuloId: string) => void
@@ -726,6 +728,8 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
         proveedores,
         addCompra,
         addProveedor,
+        saveTaller,
+        deleteTaller,
         addArticulo,
         updateArticulo,
         deleteArticulo,
