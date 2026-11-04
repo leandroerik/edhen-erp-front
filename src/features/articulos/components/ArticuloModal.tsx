@@ -101,7 +101,7 @@ function telasIniciales(articulo: Articulo | null | undefined, opciones: OpcionR
       : (Number(t.cantidadLibre) || 0) + cantidadUsada
 
     return {
-      id: `tela-${idx}-${Date.now()}`,
+      id: `tela-${idx + 1}`,
       stockKey:
         t.stockKey ||
         (opcionStock?.key ??
@@ -124,7 +124,7 @@ function telasIniciales(articulo: Articulo | null | undefined, opciones: OpcionR
 function aviosIniciales(articulo?: Articulo | null): AvioLine[] {
   if (!articulo?.avios || articulo.avios.length === 0) return []
   return articulo.avios.map((a, idx) => ({
-    id: a.id || `av-${idx}-${Date.now()}`,
+    id: a.id || `av-${idx + 1}`,
     nombre: a.nombre || '',
     monto: Number(a.monto) || 0,
     porPrenda: (a as AvioArticulo).porPrenda !== false,
@@ -339,7 +339,7 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
 
     const disponibleRollos = Math.max(1, opcion.rollosDisponibles)
     const nueva: TelaLine = {
-      id: `tela-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+      id: `tela-${telas.length + 1}`,
       stockKey: opcion.key,
       loteId: opcion.loteId,
       compraCodigo: opcion.compraCodigo,
@@ -457,7 +457,7 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
     setAvios((prev) => [
       ...prev,
       {
-        id: `av-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+        id: `av-${prev.length + 1}`,
         nombre: '',
         monto: 0,
         porPrenda: true,
@@ -506,7 +506,7 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
       costoTelaTotalUsado: costoTelaTotal,
       costoTelaPorPrenda,
       manoObra: manoObraPrenda,
-      avios: aviosValidos,
+      avios: aviosValidos.map((av, idx) => ({ ...av, id: `av-${idx + 1}` })),
       aviosPorPrenda,
       aviosTotales,
       costoUnitario,

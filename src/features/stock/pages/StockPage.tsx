@@ -16,9 +16,9 @@ import { useErpStore } from '../../../data/erpStore'
 import { resumenPagoCorte } from '../../pagos/pagos.utils'
 import type { UnidadTela } from '../../../types'
 
-const th = 'px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-stone-500'
+const th = 'px-4 py-3 text-xs font-semibold uppercase tracking-wider text-stone-500'
 const thRight = `${th} text-right`
-const td = 'px-4 py-2.5 text-sm text-stone-900'
+const td = 'px-4 py-3 text-sm text-stone-900'
 const tdRight = `${td} text-right tabular-nums`
 
 const FILAS_POR_PAGINA = 8
@@ -38,6 +38,32 @@ interface StockGeneralTela {
   coloresNombres: string[]
   valorizadoPesos: number
   info: ReturnType<typeof getStockInfo>
+}
+
+// Generador de curvas Bezier suaves (smooth cardinal spline)
+function generarCurvaSuave(puntos: Array<{ x: number; y: number }>): string {
+  if (puntos.length === 0) return ''
+  if (puntos.length === 1) return `M ${puntos[0].x} ${puntos[0].y}`
+  if (puntos.length === 2) {
+    return `M ${puntos[0].x} ${puntos[0].y} L ${puntos[1].x} ${puntos[1].y}`
+  }
+
+  let d = `M ${puntos[0].x} ${puntos[0].y}`
+  for (let i = 0; i < puntos.length - 1; i++) {
+    const p0 = puntos[i === 0 ? 0 : i - 1]
+    const p1 = puntos[i]
+    const p2 = puntos[i + 1]
+    const p3 = puntos[i + 2] || p2
+
+    const tension = 0.2
+    const cp1x = p1.x + (p2.x - p0.x) * tension
+    const cp1y = p1.y + (p2.y - p0.y) * tension
+    const cp2x = p2.x - (p3.x - p1.x) * tension
+    const cp2y = p2.y - (p3.y - p1.y) * tension
+
+    d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`
+  }
+  return d
 }
 
 export function StockPage() {
@@ -215,12 +241,11 @@ export function StockPage() {
   }, [stockPorTela])
 
   // -------------------------------------------------------------
-  // ANÁLISIS POR TELA: VENTA, GANANCIA Y COSTO (Para gráfico de líneas)
+  // ANÁLISIS POR TELA: VENTA, GANANCIA Y COSTO (Curvas suaves)
   // -------------------------------------------------------------
   const telasAnalisis = useMemo(() => {
     const mapa = new Map<string, { telaNombre: string; costo: number; venta: number; ganancia: number }>()
 
-    // Compras / Inversión de cada tela
     for (const compra of compras) {
       const actual = mapa.get(compra.telaNombre) || {
         telaNombre: compra.telaNombre,
@@ -232,7 +257,6 @@ export function StockPage() {
       mapa.set(compra.telaNombre, actual)
     }
 
-    // Ventas y Ganancias asignadas según artículos producidos con esa tela
     for (const art of articulos) {
       const prendas = Number(art.cantidadPrendas) || 0
       const ventaArt = (Number(art.precioVenta) || 0) * prendas
@@ -254,27 +278,33 @@ export function StockPage() {
 
     return Array.from(mapa.values())
       .filter((t) => t.costo > 0 || t.venta > 0)
-      .sort((a, b) => b.ganancia - a.ganancia) // Más ganancia primero
+      .sort((a, b) => b.ganancia - a.ganancia)
   }, [compras, articulos])
 
-  // Coordenadas calculadas para el gráfico de líneas (SVG Responsive)
+  // Dimensiones del gráfico profesional
   const maxGrafico = useMemo(() => {
     let max = 1000
     for (const t of telasAnalisis) {
       max = Math.max(max, t.costo, t.venta, t.ganancia)
     }
-    return max * 1.15 // margen superior
+    return max * 1.2
   }, [telasAnalisis])
 
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
+  const [pinnedIndices, setPinnedIndices] = useState<number[]>([])
 
-  // Dimensiones del canvas SVG
-  const svgWidth = 800
-  const svgHeight = 260
-  const padLeft = 70
-  const padRight = 40
-  const padTop = 25
-  const padBottom = 55
+  const togglePin = (idx: number) => {
+    setPinnedIndices((prev) =>
+      prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx]
+    )
+  }
+
+  const svgWidth = 840
+  const svgHeight = 280
+  const padLeft = 85
+  const padRight = 45
+  const padTop = 30
+  const padBottom = 65
   const chartW = svgWidth - padLeft - padRight
   const chartH = svgHeight - padTop - padBottom
 
@@ -298,64 +328,61 @@ export function StockPage() {
     })
   }, [telasAnalisis, maxGrafico, chartW, chartH])
 
-  const pathVenta = useMemo(() => {
-    if (puntosTelas.length === 0) return ''
-    return puntosTelas.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.yVenta}`).join(' ')
-  }, [puntosTelas])
+  const curvaVenta = useMemo(
+    () => generarCurvaSuave(puntosTelas.map((p) => ({ x: p.x, y: p.yVenta }))),
+    [puntosTelas],
+  )
+  const curvaGanancia = useMemo(
+    () => generarCurvaSuave(puntosTelas.map((p) => ({ x: p.x, y: p.yGanancia }))),
+    [puntosTelas],
+  )
+  const curvaCosto = useMemo(
+    () => generarCurvaSuave(puntosTelas.map((p) => ({ x: p.x, y: p.yCosto }))),
+    [puntosTelas],
+  )
 
-  const pathGanancia = useMemo(() => {
-    if (puntosTelas.length === 0) return ''
-    return puntosTelas.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.yGanancia}`).join(' ')
-  }, [puntosTelas])
-
-  const pathCosto = useMemo(() => {
-    if (puntosTelas.length === 0) return ''
-    return puntosTelas.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.yCosto}`).join(' ')
-  }, [puntosTelas])
-
-  // Área sombreada bajo la ganancia
   const areaGanancia = useMemo(() => {
     if (puntosTelas.length === 0) return ''
     const baseLine = padTop + chartH
     const firstX = puntosTelas[0].x
     const lastX = puntosTelas[puntosTelas.length - 1].x
-    return `${pathGanancia} L ${lastX} ${baseLine} L ${firstX} ${baseLine} Z`
-  }, [pathGanancia, puntosTelas, chartH])
+    return `${curvaGanancia} L ${lastX} ${baseLine} L ${firstX} ${baseLine} Z`
+  }, [curvaGanancia, puntosTelas, chartH])
 
   return (
     <div className="space-y-6">
-      {/* Cabecera con accesos directos y Cotización persistida */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      {/* Cabecera con estilo EDHEN (Stone / Amber / White) */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-stone-200 pb-4">
         <div>
-          <h1 className="text-2xl font-bold text-stone-900">Resumen General</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-stone-900">Resumen</h1>
           <p className="mt-0.5 text-xs sm:text-sm text-stone-500">
-            Vista ejecutiva del taller, stock por tela, finanzas y evolución de producción.
+            Métricas clave de taller, rendimiento por tela y valorización de inventario.
           </p>
         </div>
 
-        {/* Botones de acción rápida: Cortes y Pagos */}
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Botones de navegación al estilo EDHEN */}
+        <div className="flex items-center gap-2">
           <Link
             to="/cortes"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-600 bg-amber-50 px-3.5 py-2 text-xs font-semibold text-amber-800 shadow-xs hover:bg-amber-100 transition-colors"
+            className="inline-flex items-center gap-2 rounded-md border border-stone-300 bg-white px-3.5 py-2 text-xs font-medium text-stone-700 shadow-2xs hover:bg-stone-50 hover:text-stone-900 transition-colors"
           >
             <span>✂️</span>
-            <span>Ver Cortes</span>
+            <span>Cortes</span>
             {cortesEnTaller > 0 && (
-              <span className="rounded-full bg-amber-600 px-1.5 py-0.2 text-[10px] text-white">
-                {cortesEnTaller}
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-[10px] text-amber-800">
+                {cortesEnTaller} en taller
               </span>
             )}
           </Link>
           <Link
             to="/pagos"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-600 bg-emerald-50 px-3.5 py-2 text-xs font-semibold text-emerald-800 shadow-xs hover:bg-emerald-100 transition-colors"
+            className="inline-flex items-center gap-2 rounded-md bg-amber-700 px-3.5 py-2 text-xs font-medium text-white shadow-xs hover:bg-amber-800 transition-colors"
           >
             <span>💵</span>
-            <span>Gestión de Pagos</span>
+            <span>Pagos</span>
             {totalAPagarTalleres > 0 && (
-              <span className="rounded-full bg-emerald-700 px-1.5 py-0.2 text-[10px] text-white">
-                Saldo
+              <span className="rounded-full bg-white/20 px-2 py-0.5 font-semibold text-[10px] text-white">
+                Saldo pend.
               </span>
             )}
           </Link>
@@ -365,8 +392,8 @@ export function StockPage() {
       {/* Tarjetas KPI Superiores */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {/* Total Invertido */}
-        <div className="rounded-xl border border-stone-200 bg-white p-3.5 shadow-sm">
-          <div className="text-xs font-medium text-stone-500">Total invertido compras</div>
+        <div className="rounded-lg border border-stone-200 bg-white p-3.5 shadow-xs">
+          <div className="text-xs font-medium text-stone-500">Total invertido</div>
           <div className="mt-1 text-lg font-bold text-stone-900">
             <Money value={totalInvertidoCompras} />
           </div>
@@ -376,18 +403,18 @@ export function StockPage() {
         </div>
 
         {/* Stock valorizado */}
-        <div className="rounded-xl border border-stone-200 bg-white p-3.5 shadow-sm">
-          <div className="text-xs font-medium text-stone-500">Stock valorizado (tela)</div>
-          <div className="mt-1 text-lg font-bold text-amber-800">
+        <div className="rounded-lg border border-stone-200 bg-white p-3.5 shadow-xs">
+          <div className="text-xs font-medium text-stone-500">Stock valorizado</div>
+          <div className="mt-1 text-lg font-bold text-stone-900">
             <Money value={stockValorizadoTotal} />
           </div>
-          <div className="mt-0.5 text-xs text-stone-400">
+          <div className="mt-0.5 text-xs text-amber-700 font-medium">
             USD ≈ ${(stockValorizadoTotal / (cotizacionDolar || 1)).toFixed(0)}
           </div>
         </div>
 
         {/* Cortes en taller */}
-        <div className="rounded-xl border border-stone-200 bg-white p-3.5 shadow-sm">
+        <div className="rounded-lg border border-stone-200 bg-white p-3.5 shadow-xs">
           <div className="text-xs font-medium text-stone-500">Cortes en taller</div>
           <div className="mt-1 flex items-baseline gap-2">
             <span className="text-lg font-bold text-stone-900">{cortesEnTaller}</span>
@@ -399,17 +426,17 @@ export function StockPage() {
         </div>
 
         {/* Cortes atrasados */}
-        <div className="rounded-xl border border-stone-200 bg-white p-3.5 shadow-sm">
+        <div className="rounded-lg border border-stone-200 bg-white p-3.5 shadow-xs">
           <div className="text-xs font-medium text-stone-500">Cortes atrasados</div>
-          <div className="mt-1 text-lg font-bold text-red-600">{cortesAtrasados}</div>
+          <div className="mt-1 text-lg font-bold text-rose-600">{cortesAtrasados}</div>
           <div className="mt-0.5 text-xs text-stone-400">
-            {cortesAtrasados > 0 ? 'Requiere atención' : 'Todo a tiempo'}
+            {cortesAtrasados > 0 ? 'Con demora' : 'Todo al día'}
           </div>
         </div>
 
         {/* Total a pagar talleres */}
-        <div className="rounded-xl border border-stone-200 bg-white p-3.5 shadow-sm">
-          <div className="text-xs font-medium text-stone-500">Saldo a pagar talleres</div>
+        <div className="rounded-lg border border-stone-200 bg-white p-3.5 shadow-xs">
+          <div className="text-xs font-medium text-stone-500">Saldo a pagar</div>
           <div className="mt-1 text-lg font-bold text-stone-900">
             <Money value={totalAPagarTalleres} />
           </div>
@@ -419,51 +446,51 @@ export function StockPage() {
         </div>
 
         {/* Cotización Dólar Persistida */}
-        <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3.5 shadow-sm">
-          <label className="block text-xs font-semibold text-amber-900">Cotización USD ($)</label>
+        <div className="rounded-lg border border-stone-200 bg-stone-50 p-3.5 shadow-xs">
+          <label className="block text-xs font-medium text-stone-600">Cotización USD</label>
           <div className="mt-1 flex items-center gap-1.5">
-            <span className="text-xs font-semibold text-stone-500">$</span>
+            <span className="text-xs font-semibold text-stone-400">$</span>
             <input
               type="number"
               min={1}
               value={inputDolar}
               onChange={(e) => handleDolarChange(e.target.value)}
-              className="h-8 w-full rounded border border-amber-300 bg-white px-2 text-sm font-bold text-amber-950 focus:border-amber-600 focus:outline-none"
+              className="h-8 w-full rounded border border-stone-300 bg-white px-2 text-sm font-semibold text-stone-900 focus:border-amber-600 focus:outline-none"
               placeholder="1200"
             />
           </div>
-          <div className="mt-0.5 text-[10px] text-amber-700">Persiste en tu navegador</div>
+          <div className="mt-0.5 text-[10px] text-stone-400">Guardado automático</div>
         </div>
       </div>
 
       {/* ----------------------------------------------------------- */}
-      {/* GRÁFICO DE LÍNEAS: VENTA, GANANCIA Y COSTO POR TELA        */}
+      {/* GRÁFICO PROFESIONAL: CURVAS SUAVES POR TELA                */}
       {/* ----------------------------------------------------------- */}
-      <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-stone-100 pb-3">
+      <div className="rounded-lg border border-stone-200 bg-white p-5 shadow-xs">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-stone-100 pb-3.5">
           <div>
-            <h2 className="text-base font-bold text-stone-900">
-              Rendimiento por Tipo de Tela
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-800">
+              Rentabilidad por Tela
             </h2>
-            <p className="text-xs text-stone-500">
-              Comparativa de líneas: qué tela genera mayor retorno. Ordenado de mayor a menor ganancia.
+            <p className="mt-0.5 text-xs text-stone-500">
+              Curvas de venta, costo y ganancia neta estimada por tipo de tela.
             </p>
           </div>
 
-          {/* Leyenda interactiva */}
-          <div className="flex flex-wrap items-center gap-4 text-xs font-medium">
-            <span className="flex items-center gap-1.5 text-sky-700">
-              <span className="inline-block h-3 w-3 rounded-full bg-sky-500 border-2 border-white shadow-xs" />
-              Línea de Venta
-            </span>
-            <span className="flex items-center gap-1.5 text-emerald-700 font-bold">
-              <span className="inline-block h-3 w-3 rounded-full bg-emerald-500 border-2 border-white shadow-xs" />
-              Línea de Ganancia
-            </span>
-            <span className="flex items-center gap-1.5 text-rose-700">
-              <span className="inline-block h-3 w-3 rounded-full bg-rose-400 border-2 border-white shadow-xs" />
-              Línea de Costo / Inversión
-            </span>
+          {/* Leyenda minimalista en sintonía con EDHEN */}
+          <div className="flex flex-wrap items-center gap-4 text-xs">
+            <div className="flex items-center gap-1.5">
+              <span className="inline-block h-2 w-3 rounded-full bg-emerald-600" />
+              <span className="font-semibold text-stone-800">Ganancia</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="inline-block h-2 w-3 rounded-full bg-stone-600" />
+              <span className="text-stone-600">Venta proyectada</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="inline-block h-2 w-3 rounded-full border border-dashed border-amber-600 bg-amber-50" />
+              <span className="text-stone-600">Costo / Inversión</span>
+            </div>
           </div>
         </div>
 
@@ -472,172 +499,288 @@ export function StockPage() {
             No hay compras o artículos registrados para trazar las curvas.
           </div>
         ) : (
-          <div className="mt-4 relative">
-            {/* SVG del Gráfico de Líneas */}
-            <svg
-              viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-              className="w-full h-auto max-h-72 overflow-visible select-none"
-            >
-              <defs>
-                <linearGradient id="gradGanancia" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
-                  <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
-                </linearGradient>
-              </defs>
+          <div className="mt-4">
+            <div className="overflow-x-auto pb-2">
+              <svg
+                viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+                className="w-full min-w-[680px] h-auto overflow-visible select-none"
+              >
+                <defs>
+                  {/* Degradé suave para el área bajo la ganancia */}
+                  <linearGradient id="edhenAreaGanancia" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#059669" stopOpacity="0.16" />
+                    <stop offset="85%" stopColor="#059669" stopOpacity="0.01" />
+                  </linearGradient>
+                </defs>
 
-              {/* Guías horizontales y escala Y */}
-              {[0, 0.25, 0.5, 0.75, 1].map((pct) => {
-                const y = padTop + chartH - pct * chartH
-                const valor = Math.round(pct * maxGrafico)
-                return (
-                  <g key={pct}>
-                    <line
-                      x1={padLeft}
-                      y1={y}
-                      x2={svgWidth - padRight}
-                      y2={y}
-                      stroke="#f1f5f9"
-                      strokeDasharray={pct === 0 ? 'none' : '4 4'}
-                      strokeWidth="1"
-                    />
-                    <text
-                      x={padLeft - 10}
-                      y={y + 4}
-                      textAnchor="end"
-                      className="text-[10px] fill-stone-400 font-mono"
+                {/* Ejes y líneas de fondo tenues */}
+                {[0, 0.25, 0.5, 0.75, 1].map((pct) => {
+                  const y = padTop + chartH - pct * chartH
+                  const valor = Math.round(pct * maxGrafico)
+                  return (
+                    <g key={pct}>
+                      <line
+                        x1={padLeft}
+                        y1={y}
+                        x2={svgWidth - padRight}
+                        y2={y}
+                        stroke="#f5f5f4"
+                        strokeWidth="1"
+                      />
+                      <text
+                        x={padLeft - 12}
+                        y={y + 3.5}
+                        textAnchor="end"
+                        className="text-[11px] fill-stone-400 font-mono"
+                      >
+                        ${valor >= 1000000 ? `${(valor / 1000000).toFixed(1)}M` : valor >= 1000 ? `${(valor / 1000).toFixed(0)}k` : valor}
+                      </text>
+                    </g>
+                  )
+                })}
+
+                {/* Área sombreada de ganancia */}
+                <path d={areaGanancia} fill="url(#edhenAreaGanancia)" />
+
+                {/* Curva 1: Venta (Gris carbón / Stone 700) */}
+                <path
+                  d={curvaVenta}
+                  fill="none"
+                  stroke="#44403c"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+
+                {/* Curva 2: Costo / Inversión (Ámbar / Trazo discontinuo fino) */}
+                <path
+                  d={curvaCosto}
+                  fill="none"
+                  stroke="#d97706"
+                  strokeWidth="2"
+                  strokeDasharray="5 4"
+                  strokeLinecap="round"
+                />
+
+                {/* Curva 3: Ganancia (Verde Esmeralda sólido destacado) */}
+                <path
+                  d={curvaGanancia}
+                  fill="none"
+                  stroke="#059669"
+                  strokeWidth="3.2"
+                  strokeLinecap="round"
+                />
+
+                {/* Nodos y etiquetas de telas */}
+                {puntosTelas.map((p, idx) => {
+                  const isHovered = hoverIndex === idx
+                  const isPinned = pinnedIndices.includes(idx)
+                  const isActive = isHovered || isPinned
+                  return (
+                    <g
+                      key={p.telaNombre}
+                      className="cursor-pointer"
+                      onClick={() => togglePin(idx)}
+                      onMouseEnter={() => setHoverIndex(idx)}
+                      onMouseLeave={() => setHoverIndex(null)}
                     >
-                      ${valor >= 1000000 ? `${(valor / 1000000).toFixed(1)}M` : valor >= 1000 ? `${(valor / 1000).toFixed(0)}k` : valor}
-                    </text>
-                  </g>
-                )
-              })}
+                      {/* Zona invisible más amplia para hacer click/hover fácil en celular */}
+                      <rect
+                        x={p.x - 22}
+                        y={padTop}
+                        width={44}
+                        height={chartH + 20}
+                        fill="transparent"
+                      />
 
-              {/* Área sombreada de ganancia */}
-              <path d={areaGanancia} fill="url(#gradGanancia)" />
+                      {/* Línea vertical indicadora */}
+                      {isActive && (
+                        <line
+                          x1={p.x}
+                          y1={padTop}
+                          x2={p.x}
+                          y2={padTop + chartH}
+                          stroke={isPinned ? '#b45309' : '#059669'}
+                          strokeWidth={isPinned ? '1.8' : '1.2'}
+                          strokeDasharray="3 3"
+                        />
+                      )}
 
-              {/* Líneas principales */}
-              {/* 1. Línea de Venta */}
-              <path
-                d={pathVenta}
-                fill="none"
-                stroke="#38bdf8"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
+                      {/* Nodo Venta */}
+                      <circle
+                        cx={p.x}
+                        cy={p.yVenta}
+                        r={isActive ? 4 : 2.5}
+                        fill="#44403c"
+                        stroke="#ffffff"
+                        strokeWidth="1.5"
+                      />
 
-              {/* 2. Línea de Costo */}
-              <path
-                d={pathCosto}
-                fill="none"
-                stroke="#fb7185"
-                strokeWidth="2.5"
-                strokeDasharray="4 3"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
+                      {/* Nodo Costo */}
+                      <circle
+                        cx={p.x}
+                        cy={p.yCosto}
+                        r={isActive ? 4 : 2.5}
+                        fill="#d97706"
+                        stroke="#ffffff"
+                        strokeWidth="1.5"
+                      />
 
-              {/* 3. Línea de Ganancia (destacada) */}
-              <path
-                d={pathGanancia}
-                fill="none"
-                stroke="#10b981"
-                strokeWidth="3.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
+                      {/* Nodo Ganancia (destacado) */}
+                      <circle
+                        cx={p.x}
+                        cy={p.yGanancia}
+                        r={isPinned ? 7 : isActive ? 5.5 : 4}
+                        fill={isPinned ? '#b45309' : '#059669'}
+                        stroke="#ffffff"
+                        strokeWidth="2"
+                      />
 
-              {/* Puntos y Etiquetas en la base (Telas) */}
-              {puntosTelas.map((p, idx) => {
-                const isHovered = hoverIndex === idx
-                return (
-                  <g
-                    key={p.telaNombre}
-                    className="cursor-pointer"
-                    onMouseEnter={() => setHoverIndex(idx)}
-                    onMouseLeave={() => setHoverIndex(null)}
+                      {/* Pin indicador circular sobre el nodo si está fijado */}
+                      {isPinned && (
+                        <circle
+                          cx={p.x}
+                          cy={p.yGanancia}
+                          r={10}
+                          fill="none"
+                          stroke="#b45309"
+                          strokeWidth="1.5"
+                          opacity="0.6"
+                        />
+                      )}
+
+                      {/* Tooltip flotante superior directo en el gráfico al hacer hover */}
+                      {isHovered && (
+                        <g transform={`translate(${p.x}, ${Math.max(16, p.yGanancia - 12)})`}>
+                          <rect
+                            x={-45}
+                            y={-18}
+                            width={90}
+                            height={20}
+                            rx={4}
+                            fill="#1c1917"
+                            opacity="0.9"
+                          />
+                          <text
+                            x={0}
+                            y={-4}
+                            textAnchor="middle"
+                            fill="#ffffff"
+                            className="text-[10px] font-semibold"
+                          >
+                            {p.telaNombre}
+                          </text>
+                        </g>
+                      )}
+                    </g>
+                  )
+                })}
+              </svg>
+            </div>
+
+            {/* Fichas fijadas / comparativas y hover inferior */}
+            <div className="mt-2 border-t border-stone-100 pt-3 space-y-2">
+              {/* Barra de ayuda / limpiar */}
+              <div className="flex items-center justify-between text-[11px] text-stone-500">
+                <span>
+                  {pinnedIndices.length > 0 ? (
+                    <>
+                      <strong>{pinnedIndices.length}</strong> {pinnedIndices.length === 1 ? 'tela fijada' : 'telas fijadas para comparar'}:
+                    </>
+                  ) : (
+                    hoverIndex !== null && puntosTelas[hoverIndex] ? (
+                      <>Detalle de la tela seleccionada:</>
+                    ) : (
+                      <>Tocá cualquier punto para <strong>fijar y comparar</strong> varias telas a la vez.</>
+                    )
+                  )}
+                </span>
+                {pinnedIndices.length > 0 && (
+                  <button
+                    onClick={() => setPinnedIndices([])}
+                    className="text-stone-500 hover:text-stone-800 hover:underline font-medium"
                   >
-                    {/* Guía vertical interactiva */}
-                    <line
-                      x1={p.x}
-                      y1={padTop}
-                      x2={p.x}
-                      y2={padTop + chartH}
-                      stroke={isHovered ? '#f59e0b' : 'transparent'}
-                      strokeWidth={isHovered ? '1.5' : '0'}
-                      strokeDasharray="3 3"
-                    />
-
-                    {/* Nodo Venta */}
-                    <circle
-                      cx={p.x}
-                      cy={p.yVenta}
-                      r={isHovered ? 5.5 : 3.5}
-                      fill="#38bdf8"
-                      stroke="#fff"
-                      strokeWidth="2"
-                    />
-
-                    {/* Nodo Costo */}
-                    <circle
-                      cx={p.x}
-                      cy={p.yCosto}
-                      r={isHovered ? 5.5 : 3.5}
-                      fill="#fb7185"
-                      stroke="#fff"
-                      strokeWidth="2"
-                    />
-
-                    {/* Nodo Ganancia */}
-                    <circle
-                      cx={p.x}
-                      cy={p.yGanancia}
-                      r={isHovered ? 7 : 5}
-                      fill="#10b981"
-                      stroke="#fff"
-                      strokeWidth="2.5"
-                    />
-
-                    {/* Etiqueta de la Tela en la base */}
-                    <text
-                      x={p.x}
-                      y={padTop + chartH + 22}
-                      textAnchor="middle"
-                      className={`text-[11px] font-semibold transition-all ${
-                        isHovered ? 'fill-amber-800 font-bold scale-105' : 'fill-stone-600'
-                      }`}
-                    >
-                      {p.telaNombre.length > 12 ? `${p.telaNombre.slice(0, 11)}..` : p.telaNombre}
-                    </text>
-                  </g>
-                )
-              })}
-            </svg>
-
-            {/* Tooltip flotante con datos de la tela seleccionada */}
-            {hoverIndex !== null && puntosTelas[hoverIndex] && (
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50/80 p-2.5 text-xs">
-                <div>
-                  <span className="font-bold text-amber-950 uppercase tracking-wide">
-                    {puntosTelas[hoverIndex].telaNombre}
-                  </span>
-                  <span className="ml-2 text-stone-500 font-medium">
-                    (Posición #{hoverIndex + 1} en rentabilidad)
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-4">
-                  <span className="text-emerald-800">
-                    Ganancia: <strong>${Math.round(puntosTelas[hoverIndex].ganancia).toLocaleString('es-AR')}</strong>
-                  </span>
-                  <span className="text-sky-800">
-                    Venta: <strong>${Math.round(puntosTelas[hoverIndex].venta).toLocaleString('es-AR')}</strong>
-                  </span>
-                  <span className="text-rose-800">
-                    Costo/Inversión: <strong>${Math.round(puntosTelas[hoverIndex].costo).toLocaleString('es-AR')}</strong>
-                  </span>
-                </div>
+                    Desmarcar todas ✕
+                  </button>
+                )}
               </div>
-            )}
+
+              {/* Lista de telas fijadas (para comparar) */}
+              {pinnedIndices.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {pinnedIndices.map((idx) => {
+                    const item = puntosTelas[idx]
+                    if (!item) return null
+                    return (
+                      <div
+                        key={item.telaNombre}
+                        className="flex flex-col justify-between rounded-md border border-amber-300 bg-amber-50/50 p-2.5 text-xs shadow-2xs relative"
+                      >
+                        <div className="flex items-center justify-between pb-1.5 border-b border-amber-200/60">
+                          <span className="font-bold text-stone-900 uppercase">
+                            {item.telaNombre}
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="rounded bg-amber-100 px-1.5 py-0.2 text-[10px] font-semibold text-amber-900">
+                              #{idx + 1}
+                            </span>
+                            <button
+                              onClick={() => togglePin(idx)}
+                              className="text-stone-400 hover:text-stone-700 font-bold ml-1"
+                              title="Quitar comparación"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                        <div className="mt-2 grid grid-cols-3 gap-1 text-[11px]">
+                          <div>
+                            <div className="text-[10px] text-stone-400">Venta</div>
+                            <strong className="text-stone-800"><Money value={item.venta} /></strong>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-stone-400">Costo</div>
+                            <strong className="text-amber-900"><Money value={item.costo} /></strong>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-stone-400">Ganancia</div>
+                            <strong className="text-emerald-700 font-bold"><Money value={item.ganancia} /></strong>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : hoverIndex !== null && puntosTelas[hoverIndex] ? (
+                /* Ficha temporal de Hover si no hay fijadas */
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-stone-50 px-3.5 py-2 text-xs border border-stone-200">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-stone-900 uppercase">
+                      {puntosTelas[hoverIndex].telaNombre}
+                    </span>
+                    <span className="rounded bg-stone-200/70 px-1.5 py-0.5 text-[10px] font-medium text-stone-600">
+                      #{hoverIndex + 1} en ganancia
+                    </span>
+                    <span className="text-[10px] text-amber-800 font-medium">
+                      (Hacé click para fijar)
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-5">
+                    <span className="text-stone-600">
+                      Venta: <strong className="text-stone-900"><Money value={puntosTelas[hoverIndex].venta} /></strong>
+                    </span>
+                    <span className="text-stone-600">
+                      Costo: <strong className="text-amber-800"><Money value={puntosTelas[hoverIndex].costo} /></strong>
+                    </span>
+                    <span className="text-stone-600">
+                      Ganancia neta:{' '}
+                      <strong className="text-emerald-700 font-bold">
+                        <Money value={puntosTelas[hoverIndex].ganancia} />
+                      </strong>
+                    </span>
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
         )}
       </div>
@@ -648,15 +791,15 @@ export function StockPage() {
       <div className="space-y-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-base font-bold text-stone-900">Stock General por Tela</h2>
+            <h2 className="text-base font-semibold text-stone-900">Stock General por Tela</h2>
             <p className="mt-0.5 text-xs text-stone-500">
-              Visualización unificada por tipo de tela (no desglosada por color) para un control simple y rápido.
+              Vista consolidada por tipo de tela para control rápido de disponibilidad y valor.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <input
               className="h-9 w-full rounded-md border border-stone-300 bg-white px-3 text-sm focus:border-amber-600 focus:outline-none sm:w-64"
-              placeholder="Buscar por nombre de tela o color..."
+              placeholder="Buscar tela o color..."
               value={busqueda}
               onChange={(e) => {
                 setBusqueda(e.target.value)
@@ -679,8 +822,8 @@ export function StockPage() {
         </div>
 
         {/* Resumen badges */}
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs">
-          <span className="font-medium text-stone-700">Estado global de telas:</span>
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-stone-200 bg-white px-3.5 py-2.5 text-xs">
+          <span className="font-medium text-stone-700">Estado de telas:</span>
           {(Object.keys(NIVEL_STOCK_LABEL) as NivelStock[]).map((nivel) => (
             <span
               key={nivel}
@@ -691,12 +834,12 @@ export function StockPage() {
             </span>
           ))}
           <span className="text-stone-400">
-            · Enlaces rápidos a compras: <Link to="/rollos" className="text-amber-700 hover:underline">Ver Textil / Rollos →</Link>
+            · <Link to="/rollos" className="text-amber-700 hover:underline">Ver detalle de rollos y compras →</Link>
           </span>
         </div>
 
         {/* Tabla simplificada por tela */}
-        <div className="overflow-x-auto rounded-lg border border-stone-200 bg-white shadow-xs">
+        <div className="overflow-x-auto rounded-lg border border-stone-200 bg-white shadow-2xs">
           <table className="w-full divide-y divide-stone-200">
             <thead className="bg-stone-50">
               <tr>
@@ -718,12 +861,12 @@ export function StockPage() {
                 </tr>
               ) : (
                 stockPaginado.map((item) => (
-                  <tr key={item.telaId} className="hover:bg-stone-50/80 transition-colors">
-                    <td className={`${td} font-semibold text-stone-900`}>
+                  <tr key={item.telaId} className="hover:bg-stone-50/70 transition-colors">
+                    <td className={`${td} font-medium text-stone-900`}>
                       {item.telaNombre}
                     </td>
                     <td className={td}>
-                      <div className="flex flex-wrap items-center gap-1 max-w-xs">
+                      <div className="flex flex-wrap items-center gap-1.5 max-w-xs">
                         <span className="rounded bg-stone-100 px-1.5 py-0.5 text-[10px] font-medium text-stone-600">
                           {item.coloresCount} {item.coloresCount === 1 ? 'color' : 'colores'}
                         </span>
@@ -747,7 +890,7 @@ export function StockPage() {
                         detalle={false}
                       />
                     </td>
-                    <td className={`${tdRight} font-semibold text-amber-900`}>
+                    <td className={`${tdRight} font-semibold text-stone-800`}>
                       {formatRollos(item.disponibleRollos)}
                     </td>
                     <td className={`${tdRight} font-medium text-stone-900`}>
