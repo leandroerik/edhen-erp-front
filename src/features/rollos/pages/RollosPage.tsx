@@ -3,6 +3,7 @@ import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
 import { StockIndicator } from '../../../shared/components/StockIndicator'
 import { formatDate } from '../../../utils/format'
+import { siguienteCodigo } from '../../../utils/codigos'
 import { stockDesdeCompras, usosStockDesdeDatos } from '../../../data/mock'
 import { useErpStore } from '../../../data/erpStore'
 import type { Compra, UnidadTela } from '../../../types'
@@ -382,8 +383,10 @@ export function RollosPage() {
           open={open}
           onClose={() => setOpen(false)}
           onSave={(d) => {
-            const seq = compras.length + 1
-            const codigo = `COMP-${String(seq).padStart(4, '0')}`
+            const codigo = siguienteCodigo(
+              'COMP',
+              compras.map((c) => c.codigo),
+            )
             const lotes = (d.lotes || []).map((l: any, idx: number) => ({
               id: l.id || `lote-${Date.now()}-${idx}`,
               colorId: l.colorId || `col-${(l.colorNombre || '').toLowerCase().replace(/\s+/g, '-')}`,

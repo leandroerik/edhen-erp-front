@@ -3,17 +3,11 @@ import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
 import { Pagination } from '../../../shared/components/Pagination'
 import { useErpStore } from '../../../data/erpStore'
+import { siguienteCodigo } from '../../../utils/codigos'
+import { ordenarPorCodigoDesc } from '../../../utils/orden'
 import type { Articulo } from '../../../types'
 import { ArticuloModal } from '../components/ArticuloModal'
 import { ArticuloDetalleModal } from '../components/ArticuloDetalleModal'
-
-function nextCodigoArticulo(articulos: Articulo[]) {
-  const numeros = articulos
-    .map((a) => /^ART-(\d+)$/.exec(a.codigoArticulo)?.[1])
-    .filter((n): n is string => !!n)
-    .map(Number)
-  return `ART-${String((numeros.length ? Math.max(...numeros) : 0) + 1).padStart(4, '0')}`
-}
 
 const th = 'px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-stone-500'
 const thRight = `${th} text-right`
@@ -29,7 +23,10 @@ export function ArticulosPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
-  const nextCodigo = nextCodigoArticulo(articulos)
+  const nextCodigo = siguienteCodigo(
+    'ART',
+    articulos.map((a) => a.codigoArticulo),
+  )
 
   // KPIs globales
   const kpis = useMemo(() => {
@@ -75,12 +72,8 @@ export function ArticulosPage() {
           return enNombre || enCodigo || enDesc || enTelas
         })
       : articulos
-    // Mas nuevo primero
-    return [...lista].sort((a, b) => {
-      const numA = parseInt(/(\d+)/.exec(a.codigoArticulo)?.[1] ?? '0', 10)
-      const numB = parseInt(/(\d+)/.exec(b.codigoArticulo)?.[1] ?? '0', 10)
-      return numB - numA
-    })
+    // Más nuevo primero (código descendente)
+    return ordenarPorCodigoDesc(lista, (a) => a.codigoArticulo)
   }, [articulos, busqueda])
 
   const totalFiltrados = articulosFiltrados.length
@@ -98,7 +91,7 @@ export function ArticulosPage() {
     const nombre = articulo.nombre || articulo.descripcion || articulo.codigoArticulo
     if (
       !window.confirm(
-        `¿Eliminar el artículo ${articulo.codigoArticulo} · ${nombre}? Esta acción no se puede deshacer.`,
+        `¿Eliminar el artículo ${articulo.codigoArticulo} · ${nombre}? Esta acción no se puede deshacer. Los artículos posteriores se renumeran para mantener la secuencia.`,
       )
     ) {
       return
@@ -113,27 +106,29 @@ export function ArticulosPage() {
       {/* Cabecera */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-stone-900">Artículos</h1>
-          <p className="mt-1 text-sm text-stone-500">
+          <h1 className="text-xl font-semibold text-stone-900 sm:text-2xl">Artículos</h1>
+          <p className="mt-0.5 text-xs text-stone-500 sm:text-sm">
             Costos de producción, telas asignadas y rentabilidad por prenda.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <input
-            className="h-9 w-56 rounded-md border border-stone-300 bg-white px-3 text-sm focus:border-amber-600 focus:outline-none"
+            className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm focus:border-amber-600 focus:outline-none sm:h-9 sm:w-56"
             placeholder="Buscar por prenda, tela o código..."
             value={busqueda}
             onChange={(e) => handleSearchChange(e.target.value)}
           />
-          <Button onClick={() => setOpen(true)}>+ Nuevo artículo</Button>
+          <Button className="w-full sm:w-auto" onClick={() => setOpen(true)}>
+            + Nuevo artículo
+          </Button>
         </div>
       </div>
 
       {/* Tarjetas KPI de resumen ejecutivo */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-xl border border-stone-200 bg-white p-3.5 shadow-sm">
+        <div className="rounded-xl border border-stone-200 bg-white p-3 shadow-sm sm:p-3.5">
           <div className="text-xs font-medium text-stone-500">Catálogo de prendas</div>
-          <div className="mt-1 text-2xl font-bold text-stone-900">
+          <div className="mt-1 text-lg font-bold text-stone-900 sm:text-2xl">
             {kpis.totalArticulos} <span className="text-sm font-normal text-stone-500">modelos</span>
           </div>
           <div className="mt-0.5 text-xs text-stone-500">
@@ -141,9 +136,9 @@ export function ArticulosPage() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-stone-200 bg-white p-3.5 shadow-sm">
+        <div className="rounded-xl border border-stone-200 bg-white p-3 shadow-sm sm:p-3.5">
           <div className="text-xs font-medium text-stone-500">Inversión en producción</div>
-          <div className="mt-1 text-2xl font-bold text-stone-900">
+          <div className="mt-1 text-lg font-bold text-stone-900 sm:text-2xl">
             <Money value={kpis.inversionProduccion} />
           </div>
           <div className="mt-0.5 text-xs text-stone-500">
@@ -151,9 +146,9 @@ export function ArticulosPage() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-stone-200 bg-white p-3.5 shadow-sm">
+        <div className="rounded-xl border border-stone-200 bg-white p-3 shadow-sm sm:p-3.5">
           <div className="text-xs font-medium text-stone-500">Venta proyectada</div>
-          <div className="mt-1 text-2xl font-bold text-stone-900">
+          <div className="mt-1 text-lg font-bold text-stone-900 sm:text-2xl">
             <Money value={kpis.ventaProyectada} />
           </div>
           <div className="mt-0.5 text-xs text-stone-500">
@@ -161,9 +156,9 @@ export function ArticulosPage() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3.5 shadow-sm">
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 shadow-sm sm:p-3.5">
           <div className="text-xs font-medium text-emerald-800">Ganancia potencial</div>
-          <div className="mt-1 text-2xl font-bold text-emerald-900">
+          <div className="mt-1 text-lg font-bold text-emerald-900 sm:text-2xl">
             <Money value={kpis.gananciaTotal} />
           </div>
           <div className="mt-0.5 text-xs font-medium text-emerald-700">
@@ -172,8 +167,94 @@ export function ArticulosPage() {
         </div>
       </div>
 
+      {/* Vista Mobile: Tarjetas compactas */}
+      <div className="space-y-3 sm:hidden">
+        {totalFiltrados === 0 ? (
+          <div className="rounded-lg border border-stone-200 bg-white p-6 text-center text-sm text-stone-400">
+            {busqueda
+              ? 'No se encontraron artículos con esa búsqueda.'
+              : 'No hay artículos cargados todavía.'}
+          </div>
+        ) : (
+          articulosPaginados.map((a) => {
+            const nombre = a.nombre || a.descripcion || 'Artículo'
+            const descripcion = a.nombre && a.descripcion ? a.descripcion : ''
+            const margen = Number(a.margenReal || 0)
+            const telasCount = a.telas?.length || 0
+
+            return (
+              <div
+                key={a.id}
+                onClick={() => setViewing(a)}
+                className="cursor-pointer rounded-xl border border-stone-200 bg-white p-3.5 shadow-sm transition-colors active:bg-stone-50"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-mono text-[11px] font-semibold text-amber-900">
+                      {a.codigoArticulo}
+                    </div>
+                    <div className="truncate text-sm font-semibold text-stone-900">
+                      {nombre}
+                    </div>
+                    {(descripcion || telasCount > 0) && (
+                      <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-stone-500">
+                        {descripcion && <span className="truncate">{descripcion}</span>}
+                        {telasCount > 0 && (
+                          <span className="shrink-0 rounded bg-stone-100 px-1.5 py-0.5 text-[10px] text-stone-600">
+                            {telasCount} {telasCount === 1 ? 'tela' : 'telas'}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                      margen >= 100
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : margen >= 50
+                          ? 'bg-stone-100 text-stone-700'
+                          : 'bg-amber-100 text-amber-800'
+                    }`}
+                  >
+                    {margen.toFixed(1)}%
+                  </span>
+                </div>
+
+                <div className="mt-2.5 grid grid-cols-3 gap-2 rounded-lg bg-stone-50 px-2.5 py-2 text-xs">
+                  <div>
+                    <div className="text-[10px] text-stone-500">Prendas</div>
+                    <div className="font-semibold text-stone-900">{a.cantidadPrendas}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-stone-500">Costo u.</div>
+                    <div className="font-semibold text-stone-900">
+                      <Money value={a.costoUnitario} />
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[10px] text-stone-500">Venta</div>
+                    <div className="font-semibold text-stone-900">
+                      <Money value={a.precioVenta} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-2 flex items-center justify-between gap-2 text-xs">
+                  <span className="font-medium text-emerald-800">
+                    +<Money value={a.gananciaUnitaria} /> / prenda
+                  </span>
+                  <span className="font-bold text-emerald-900">
+                    Total: <Money value={a.gananciaTotal || 0} />
+                  </span>
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+
       {/* Tabla de artículos */}
-      <div className="overflow-x-auto rounded-lg border border-stone-200 bg-white shadow-sm">
+      <div className="hidden overflow-x-auto rounded-lg border border-stone-200 bg-white shadow-sm sm:block">
         <table className="w-full divide-y divide-stone-200">
           <thead className="bg-stone-50">
             <tr>

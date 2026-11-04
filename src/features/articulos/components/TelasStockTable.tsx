@@ -1,6 +1,7 @@
 import { Fragment, useState } from 'react'
 import { Button } from '../../../shared/components/Button'
 import { formatDate } from '../../../utils/format'
+import { formatRollos } from '../../../utils/stock'
 import { COMPRAS_ROLLOS, type OpcionRollo } from '../stockRollos'
 
 interface Seleccionada {
@@ -87,7 +88,7 @@ export function TelasStockTable({ seleccionadas, onAgregar }: Props) {
                           </span>
                         </span>
                         <span className="font-normal text-stone-500">
-                          {compra.opciones.length} lotes · {rollosLibres} rollos libres
+                          {compra.opciones.length} lotes · {formatRollos(rollosLibres)} rollos libres
                         </span>
                       </div>
                     </td>
@@ -101,7 +102,7 @@ export function TelasStockTable({ seleccionadas, onAgregar }: Props) {
                           <td className={`${td} text-stone-600`}>{opcion.loteId}</td>
                           <td className={td}>{opcion.telaNombre}</td>
                           <td className={`${td} text-stone-600`}>{opcion.colorNombre}</td>
-                          <td className={tdRight}>{opcion.rollosDisponibles}</td>
+                          <td className={tdRight}>{formatRollos(opcion.rollosDisponibles)}</td>
                           <td className={tdRight}>
                             {opcion.cantidadDisponible.toFixed(2)}{' '}
                             {opcion.unidad === 'METRO' ? 'm' : 'kg'}

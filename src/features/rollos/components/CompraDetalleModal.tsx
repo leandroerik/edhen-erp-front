@@ -1,7 +1,7 @@
 import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
 import { formatDate } from '../../../utils/format'
-import { formatCantidad, getStockInfo } from '../../../utils/stock'
+import { formatCantidad, formatRollos, getStockInfo } from '../../../utils/stock'
 import { stockDesdeCompras, usosStockDesdeDatos } from '../../../data/mock'
 import { useErpStore } from '../../../data/erpStore'
 import type { Compra } from '../../../types'
@@ -189,7 +189,7 @@ export function CompraDetalleModal({ compra, onClose }: Props) {
                       <td className={tdRight}>
                         <div>{l.rollos}</div>
                         <div className="text-[10px] font-normal text-stone-500">
-                          Disp. {rollosDisponibles}
+                          Disp. {formatRollos(rollosDisponibles)}
                         </div>
                       </td>
                       <td className={tdRight}>

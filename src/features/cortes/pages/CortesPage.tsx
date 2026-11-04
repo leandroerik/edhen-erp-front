@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
 import { formatDate } from '../../../utils/format'
+import { siguienteCodigo } from '../../../utils/codigos'
+import { ordenarPorFechaYCodigoDesc } from '../../../utils/orden'
 import { mockTalleres } from '../../../data/mock'
 import { useErpStore } from '../../../data/erpStore'
 import type { EstadoCorte } from '../../../types'
@@ -39,12 +41,23 @@ export function CortesPage() {
   const [filtroEstado, setFiltroEstado] = useState<string>('TODOS')
   const [openModal, setOpenModal] = useState(false)
 
-  const nextCodigo = `C-${String(cortes.length + 1).padStart(4, '0')}`
+  const nextCodigo = siguienteCodigo(
+    'C',
+    cortes.map((c) => c.codigo),
+  )
 
-  const cortesFiltrados = cortes.filter((c) => {
-    if (filtroEstado === 'TODOS') return true
-    return c.estado === filtroEstado
-  })
+  const cortesFiltrados = useMemo(() => {
+    const lista =
+      filtroEstado === 'TODOS'
+        ? cortes
+        : cortes.filter((c) => c.estado === filtroEstado)
+    // Más nuevos primero
+    return ordenarPorFechaYCodigoDesc(
+      lista,
+      (c) => c.fecha,
+      (c) => c.codigo,
+    )
+  }, [cortes, filtroEstado])
 
   return (
     <div className="space-y-4">

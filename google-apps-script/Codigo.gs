@@ -21,6 +21,17 @@ const SHEETS = {
   PROVEEDORES: 'Proveedores',
 }
 
+// Entidades que llegan desde el front (guardarVarios) -> pestaña de la hoja.
+const ENTIDADES_A_HOJA = {
+  articulo: SHEETS.ARTICULOS,
+  encimada: SHEETS.ENCIMADAS,
+  corte: SHEETS.CORTES,
+  compra: SHEETS.COMPRAS,
+  pago: SHEETS.PAGOS,
+  taller: SHEETS.TALLERES,
+  proveedor: SHEETS.PROVEEDORES,
+}
+
 /**
  * 1. INICIALIZADOR: Creación automática de pestañas con sus encabezados
  * Puedes ejecutar esta función manualmente en el editor de Apps Script (botón "Ejecutar")
@@ -236,6 +247,9 @@ function doPost(e) {
       case 'guardarEncimada':
         resultado = upsertFila(SHEETS.ENCIMADAS, payload)
         break
+      case 'eliminarEncimada':
+        resultado = eliminarFila(SHEETS.ENCIMADAS, payload.id)
+        break
       case 'guardarCompra':
         resultado = upsertFila(SHEETS.COMPRAS, payload)
         break
@@ -250,6 +264,9 @@ function doPost(e) {
         break
       case 'actualizarEstadoCorte':
         resultado = actualizarCampo(SHEETS.CORTES, payload.id, 'estado', payload.nuevoEstado)
+        break
+      case 'guardarVarios':
+        resultado = guardarVarios(payload)
         break
       case 'migrarTodo':
         inicializarHojas()
@@ -293,27 +310,43 @@ function leerTabla(nombreHoja) {
   const lastCol = sheet.getLastColumn()
   if (lastRow <= 1 || lastCol === 0) return []
 
-  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0]
+  const headers = sheet
+    .getRange(1, 1, 1, lastCol)
+    .getValues()[0]
+    .map(function (h) { return String(h || '').trim() })
   const values = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues()
 
-  return values.map(function (row) {
-    let obj = {}
-    headers.forEach(function (header, colIdx) {
-      let val = row[colIdx]
-      // Si la columna termina en _json, parseamos el JSON guardado
-      if (typeof val === 'string' && header.endsWith('_json')) {
-        const campoLimpio = header.replace('_json', '')
-        try {
-          obj[campoLimpio] = val ? JSON.parse(val) : []
-        } catch (e) {
-          obj[campoLimpio] = val
-        }
-      } else {
-        obj[header] = val
-      }
+  return values
+    .filter(function (row) {
+      // Ignoramos filas totalmente vacías (formato sobrante en la hoja).
+      return row.some(function (val) {
+        return val !== '' && val !== null && val !== undefined
+      })
     })
-    return obj
-  })
+    .map(function (row) {
+      let obj = {}
+      headers.forEach(function (header, colIdx) {
+        let val = row[colIdx]
+        // Normalizamos los IDs a texto: Sheets puede guardarlos como número
+        // y luego las comparaciones estrictas (===) del frontend fallan.
+        const esId = header === 'id' || /Id$/.test(header)
+        if (esId && val !== '' && val !== null && val !== undefined) {
+          val = String(val).trim()
+        }
+        // Si la columna termina en _json, parseamos el JSON guardado
+        if (typeof val === 'string' && header.endsWith('_json')) {
+          const campoLimpio = header.replace('_json', '')
+          try {
+            obj[campoLimpio] = val ? JSON.parse(val) : []
+          } catch (e) {
+            obj[campoLimpio] = val
+          }
+        } else {
+          obj[header] = val
+        }
+      })
+      return obj
+    })
 }
 
 function upsertFila(nombreHoja, registro) {
@@ -333,7 +366,29 @@ function upsertFila(nombreHoja, registro) {
     sheet.appendRow(headers)
     sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold')
   } else {
-    headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
+    headers = sheet
+      .getRange(1, 1, 1, sheet.getLastColumn())
+      .getValues()[0]
+      .map(function (h) { return String(h || '').trim() })
+
+    // Si el registro trae campos que la hoja todavía no tiene (por ejemplo
+    // encimadaId/encimadaItemId), agregamos las columnas al final en vez de
+    // descartar esos datos silenciosamente.
+    const faltantes = Object.keys(registro)
+      .map(function (k) {
+        return registro[k] !== null && typeof registro[k] === 'object'
+          ? k + '_json'
+          : k
+      })
+      .filter(function (h) { return headers.indexOf(h) === -1 })
+
+    if (faltantes.length > 0) {
+      sheet
+        .getRange(1, headers.length + 1, 1, faltantes.length)
+        .setValues([faltantes])
+        .setFontWeight('bold')
+      headers = headers.concat(faltantes)
+    }
   }
 
   // Preparamos los valores para la fila alineados con los encabezados
@@ -370,6 +425,29 @@ function upsertFila(nombreHoja, registro) {
   }
 
   return registro
+}
+
+/**
+ * Guarda varios registros de una misma entidad en una sola llamada.
+ * Se usa para renumerar códigos sin disparar un request por fila.
+ */
+function guardarVarios(payload) {
+  const entidad = payload && payload.entidad
+  const registros = (payload && payload.registros) || []
+  const nombreHoja = ENTIDADES_A_HOJA[entidad]
+
+  if (!nombreHoja) {
+    throw new Error('Entidad desconocida: ' + entidad)
+  }
+  if (!Array.isArray(registros)) {
+    throw new Error('registros debe ser un array')
+  }
+
+  registros.forEach(function (registro) {
+    upsertFila(nombreHoja, registro)
+  })
+
+  return { entidad: entidad, guardados: registros.length }
 }
 
 function eliminarFila(nombreHoja, id) {

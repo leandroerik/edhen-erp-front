@@ -23,7 +23,9 @@ import type {
   Taller,
   TelaArticulo,
 } from '../types'
-import { fetchGasBootstrap, postGasAction } from '../api/gasClient'
+import { fetchGasBootstrap, postGasAction, postGasBatch } from '../api/gasClient'
+import { anchoCodigo, renumerarConsecutivos } from '../utils/codigos'
+import { redondearRollos } from '../utils/stock'
 
 const STORAGE_KEY = 'edhen_erp_data_v1'
 
@@ -71,6 +73,7 @@ interface ErpStore {
   updateArticulo: (articulo: Articulo) => void
   deleteArticulo: (articuloId: string) => void
   saveEncimada: (encimada: Encimada) => void
+  deleteEncimada: (encimadaId: string) => void
   addCorte: (corte: Corte) => void
   updateCorte: (corte: Corte) => void
   changeEstadoCorte: (corteId: string, nuevoEstado: EstadoCorte) => void
@@ -109,6 +112,48 @@ function nextCorteSeq(cortes: Corte[]) {
     .filter((n): n is string => !!n)
     .map(Number)
   return (numeros.length ? Math.max(...numeros) : 0) + 1
+}
+
+/**
+ * Deja las series ART-/ENC- consecutivas (1..N) y mantiene sincronizadas las
+ * descripciones "Encimada ENC-XXXX". Devuelve lo que cambió para persistirlo.
+ */
+function normalizarCodigos(articulos: Articulo[], encimadas: Encimada[]) {
+  const encs = renumerarConsecutivos(
+    encimadas,
+    'ENC',
+    (encimada) => encimada.codigo,
+    (encimada, codigo) => ({ ...encimada, codigo }),
+  )
+  const renombres = new Map(encs.mapaCodigos.map(({ antes, despues }) => [antes, despues]))
+
+  const arts = renumerarConsecutivos(
+    articulos,
+    'ART',
+    (articulo) => articulo.codigoArticulo,
+    (articulo, codigoArticulo) => ({ ...articulo, codigoArticulo }),
+  )
+
+  const cambiadosArts = new Map(arts.cambiados.map((articulo) => [articulo.id, articulo]))
+  const artsFinal = arts.items.map((articulo) => {
+    const anterior = String(articulo.descripcion || '')
+      .trim()
+      .replace(/^Encimada\s+/i, '')
+    const nuevo = renombres.get(anterior)
+    if (!nuevo) return articulo
+    const descripcion = `Encimada ${nuevo}`
+    if (descripcion === articulo.descripcion) return articulo
+    const actualizado = { ...articulo, descripcion }
+    cambiadosArts.set(articulo.id, actualizado)
+    return actualizado
+  })
+
+  return {
+    articulos: artsFinal,
+    encimadas: encs.items,
+    articulosCambiados: [...cambiadosArts.values()],
+    encimadasCambiadas: encs.cambiados,
+  }
 }
 
 function totalCapas(encimada: Encimada) {
@@ -155,9 +200,12 @@ function articuloDesdeItem(
           telaNombre: t.telaNombre,
           colorNombre: t.colorNombre,
           unidad: t.unidad,
-          rollosUsados: Math.max(1, Math.round((t.rollosUsados || 1) * factorPorc)),
+          rollosUsados: redondearRollos((t.rollosUsados || 0) * factorPorc),
           rollosDisponibles: t.rollosDisponibles,
-          rollosLibres: Math.max(0, t.rollosDisponibles - Math.round((t.rollosUsados || 1) * factorPorc)),
+          rollosLibres: Math.max(
+            0,
+            redondearRollos(t.rollosDisponibles - (t.rollosUsados || 0) * factorPorc),
+          ),
           cantidadUsar: Math.round(t.cantidadUsada * factorPorc * 10) / 10,
           cantidadLibre: Math.max(0, t.cantidadDisponible - t.cantidadUsada * factorPorc),
           precioUnitario: t.precioUnitario,
@@ -249,6 +297,23 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
     })
   }, [articulos, encimadas, cortes, pagos, compras, talleres, proveedores])
 
+  // Persiste los códigos que cambió la normalización/renumeración.
+  // Intenta un solo request por entidad; si el backend todavía no tiene
+  // `guardarVarios`, cae a guardar fila por fila.
+  const persistirCodigos = (normalizado: ReturnType<typeof normalizarCodigos>) => {
+    const { articulosCambiados, encimadasCambiadas } = normalizado
+    if (encimadasCambiadas.length > 0) {
+      postGasBatch('encimada', encimadasCambiadas).then((ok) => {
+        if (!ok) encimadasCambiadas.forEach((e) => postGasAction('guardarEncimada', e))
+      })
+    }
+    if (articulosCambiados.length > 0) {
+      postGasBatch('articulo', articulosCambiados).then((ok) => {
+        if (!ok) articulosCambiados.forEach((a) => postGasAction('guardarArticulo', a))
+      })
+    }
+  }
+
   // Función de sincronización con Google Sheets (trae lo último cargado en Sheets)
   const sincronizarConSheets = async (): Promise<{
     ok: boolean
@@ -268,17 +333,23 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
 
       const counts: Record<string, number> = {}
 
+      // Dejamos ART-/ENC- consecutivos también en los datos que ya existían en
+      // la hoja (huecos por borrados viejos o códigos con otro relleno).
+      const artsBase = Array.isArray(data.articulos) ? data.articulos : articulos
+      const encsBase = Array.isArray(data.encimadas) ? data.encimadas : encimadas
+      const normalizado = normalizarCodigos(artsBase, encsBase)
+
       if (Array.isArray(data.articulos)) {
-        setArticulos(data.articulos)
-        counts.articulos = data.articulos.length
+        setArticulos(normalizado.articulos)
+        counts.articulos = normalizado.articulos.length
       }
       if (Array.isArray(data.cortes)) {
         setCortes(data.cortes)
         counts.cortes = data.cortes.length
       }
       if (Array.isArray(data.encimadas)) {
-        setEncimadas(data.encimadas)
-        counts.encimadas = data.encimadas.length
+        setEncimadas(normalizado.encimadas)
+        counts.encimadas = normalizado.encimadas.length
       }
       if (Array.isArray(data.pagos)) {
         setPagos(data.pagos)
@@ -297,10 +368,13 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
         counts.proveedores = data.proveedores.length
       }
 
+      // Persistimos solo los códigos que la normalización tuvo que corregir.
+      persistirCodigos(normalizado)
+
       saveStoreData({
-        articulos: data.articulos || articulos,
+        articulos: normalizado.articulos,
         cortes: data.cortes || cortes,
-        encimadas: data.encimadas || encimadas,
+        encimadas: normalizado.encimadas,
         pagos: data.pagos || pagos,
         compras: data.compras || compras,
         talleres: data.talleres || talleres,
@@ -419,7 +493,8 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
     // Generar automáticamente el nuevo corte asignado al taller en estado PREPARADO
     setCortes((prev) => {
       const seq = nextCorteSeq(prev)
-      const codigoCorte = `C-${String(seq).padStart(4, '0')}`
+      const ancho = anchoCodigo('C', prev.map((c) => c.codigo))
+      const codigoCorte = `C-${String(seq).padStart(ancho, '0')}`
       const fechaHoy = new Date().toISOString().slice(0, 10)
       const fechaEntrega = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString().slice(0, 10)
 
@@ -491,8 +566,13 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
   }
 
   const deleteArticulo = (articuloId: string) => {
-    setArticulos((prev) => prev.filter((articulo) => articulo.id !== articuloId))
+    const restantes = articulos.filter((articulo) => articulo.id !== articuloId)
+    const normalizado = normalizarCodigos(restantes, encimadas)
+    setArticulos(normalizado.articulos)
+    setEncimadas(normalizado.encimadas)
     postGasAction('eliminarArticulo', { id: articuloId })
+    // Numeración consecutiva: al borrar, los códigos posteriores bajan uno.
+    persistirCodigos(normalizado)
   }
 
   const addCorte = (corte: Corte) => {
@@ -591,26 +671,45 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
     )
     postGasAction('guardarEncimada', encimada)
 
-    setArticulos((prev) => {
-      const next = [...prev]
-      let seq = nextArticuloSeq(next)
+    // Los artículos que se generan/actualizan desde la encimada también se
+    // persisten en Sheets; si no, al sincronizar desaparecen o quedan con
+    // IDs huérfanos respecto de la encimada.
+    const next = [...articulos]
+    let seq = nextArticuloSeq(next)
+    const ancho = anchoCodigo('ART', next.map((a) => a.codigoArticulo))
+    const articulosAfectados: Articulo[] = []
 
-      for (const item of encimada.items) {
-        if (!item.modeloNombre.trim() || item.cantidad <= 0) continue
-        const idx = next.findIndex(
-          (a) => a.encimadaId === encimada.id && a.encimadaItemId === item.id,
-        )
-        const existente = idx >= 0 ? next[idx] : undefined
-        const codigo = existente?.codigoArticulo ?? `ART-${String(seq).padStart(4, '0')}`
-        const articulo = articuloDesdeItem(encimada, item, existente, codigo)
-        if (idx >= 0) next[idx] = articulo
-        else {
-          next.unshift(articulo)
-          seq += 1
-        }
+    for (const item of encimada.items) {
+      if (!item.modeloNombre.trim() || item.cantidad <= 0) continue
+      const idx = next.findIndex(
+        (a) => a.encimadaId === encimada.id && a.encimadaItemId === item.id,
+      )
+      const existente = idx >= 0 ? next[idx] : undefined
+      const codigo = existente?.codigoArticulo ?? `ART-${String(seq).padStart(ancho, '0')}`
+      const articulo = articuloDesdeItem(encimada, item, existente, codigo)
+      articulosAfectados.push(articulo)
+      if (idx >= 0) {
+        next[idx] = articulo
+      } else {
+        next.unshift(articulo)
+        seq += 1
       }
-      return next
+    }
+
+    setArticulos(next)
+    articulosAfectados.forEach((articulo) => {
+      postGasAction('guardarArticulo', articulo)
     })
+  }
+
+  const deleteEncimada = (encimadaId: string) => {
+    const restantes = encimadas.filter((e) => e.id !== encimadaId)
+    const normalizado = normalizarCodigos(articulos, restantes)
+    setEncimadas(normalizado.encimadas)
+    setArticulos(normalizado.articulos)
+    postGasAction('eliminarEncimada', { id: encimadaId })
+    // Numeración consecutiva: al borrar, las encimadas posteriores bajan uno.
+    persistirCodigos(normalizado)
   }
 
   return (
@@ -629,6 +728,7 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
         updateArticulo,
         deleteArticulo,
         saveEncimada,
+        deleteEncimada,
         addCorte,
         updateCorte,
         changeEstadoCorte,

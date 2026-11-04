@@ -143,3 +143,25 @@ export async function postGasAction(action: string, payload: any): Promise<boole
   }
 }
 
+export type EntidadLote =
+  | 'articulo'
+  | 'encimada'
+  | 'corte'
+  | 'compra'
+  | 'pago'
+  | 'taller'
+  | 'proveedor'
+
+/**
+ * Guarda varios registros de la misma entidad en un solo request.
+ * Devuelve false si la versión deployada de Apps Script no lo soporta,
+ * para que el llamador pueda reintentar uno por uno.
+ */
+export async function postGasBatch(
+  entidad: EntidadLote,
+  registros: unknown[],
+): Promise<boolean> {
+  if (registros.length === 0) return true
+  return postGasAction('guardarVarios', { entidad, registros })
+}
+

@@ -4,6 +4,7 @@ import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
 import { formatDate } from '../../../utils/format'
 import { useErpStore } from '../../../data/erpStore'
+import { ordenarPorFechaYCodigoDesc } from '../../../utils/orden'
 import type { EstadoPagoCorte } from '../pagos.utils'
 import {
   ESTADO_PAGO_LABEL,
@@ -68,8 +69,10 @@ export function PagosPage() {
     () => corteParam,
   )
 
-  const cortesPagables = cortes.filter(
-    (corte) => corte.tallerId && corte.tallerId !== 'sin-taller',
+  const cortesPagables = ordenarPorFechaYCodigoDesc(
+    cortes.filter((corte) => corte.tallerId && corte.tallerId !== 'sin-taller'),
+    (corte) => corte.fecha,
+    (corte) => corte.codigo,
   )
   const resumenes = cortesPagables.map((corte) => ({
     corte,

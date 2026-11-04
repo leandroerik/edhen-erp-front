@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Button } from '../../../shared/components/Button'
 import { formatDate } from '../../../utils/format'
+import { siguienteCodigo } from '../../../utils/codigos'
+import { ordenarPorFechaYCodigoDesc } from '../../../utils/orden'
 import { useErpStore } from '../../../data/erpStore'
 import type { Encimada } from '../../../types'
 import { EncimadaModal } from '../components/EncimadaModal'
@@ -21,10 +23,35 @@ function totales(encimada: Encimada) {
 }
 
 export function CargaCapasPage() {
-  const { encimadas, saveEncimada } = useErpStore()
+  const { encimadas, articulos, saveEncimada, deleteEncimada } = useErpStore()
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Encimada | null>(null)
-  const nextCodigo = `ENC-${String(encimadas.length + 1).padStart(4, '0')}`
+  const nextCodigo = siguienteCodigo(
+    'ENC',
+    encimadas.map((e) => e.codigo),
+  )
+
+  // Más nuevas primero
+  const encimadasOrdenadas = useMemo(
+    () => ordenarPorFechaYCodigoDesc(encimadas, (e) => e.fecha, (e) => e.codigo),
+    [encimadas],
+  )
+
+  const handleEliminar = (encimada: Encimada) => {
+    const vinculados = articulos.filter((a) => a.encimadaId === encimada.id).length
+    const extra = vinculados
+      ? ` Los ${vinculados} ${vinculados === 1 ? 'artículo generado' : 'artículos generados'} desde ella se mantienen.`
+      : ''
+    if (
+      !window.confirm(
+        `¿Eliminar la encimada ${encimada.codigo}? Se liberan los rollos usados.${extra} Las encimadas posteriores se renumeran para mantener la secuencia.`,
+      )
+    ) {
+      return
+    }
+    deleteEncimada(encimada.id)
+    if (editing?.id === encimada.id) setEditing(null)
+  }
 
   return (
     <div>
@@ -47,12 +74,12 @@ export function CargaCapasPage() {
 
       {/* Vista Mobile: Tarjetas compactas */}
       <div className="mt-4 space-y-3 sm:hidden">
-        {encimadas.length === 0 ? (
+        {encimadasOrdenadas.length === 0 ? (
           <div className="rounded-lg border border-stone-200 bg-white p-6 text-center text-sm text-stone-400">
             No hay encimadas cargadas.
           </div>
         ) : (
-          encimadas.map((encimada) => {
+          encimadasOrdenadas.map((encimada) => {
             const t = totales(encimada)
             const modelosTexto = encimada.items
               .map(
@@ -79,15 +106,27 @@ export function CargaCapasPage() {
                     <span className="font-semibold text-stone-900">{encimada.codigo}</span>
                     <span className="text-xs text-stone-500">{formatDate(encimada.fecha)}</span>
                   </div>
-                  <span
-                    className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                      encimada.estado === 'EN_CORTE'
-                        ? 'bg-amber-100 text-amber-800'
-                        : 'bg-emerald-100 text-emerald-800'
-                    }`}
-                  >
-                    {encimada.estado === 'EN_CORTE' ? 'En corte' : 'Cerrada'}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                        encimada.estado === 'EN_CORTE'
+                          ? 'bg-amber-100 text-amber-800'
+                          : 'bg-emerald-100 text-emerald-800'
+                      }`}
+                    >
+                      {encimada.estado === 'EN_CORTE' ? 'En corte' : 'Cerrada'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleEliminar(encimada)
+                      }}
+                      className="rounded px-1.5 py-0.5 text-[11px] font-medium text-red-700 hover:bg-red-50"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
                 </div>
 
                 <div className="mt-2 text-xs text-stone-600">
@@ -120,17 +159,18 @@ export function CargaCapasPage() {
               <th className={thRight}>Capas</th>
               <th className={`${th} text-left`}>Modelos</th>
               <th className={thRight}>Total prendas</th>
+              <th className={`${th} text-right`}>Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-stone-100">
-            {encimadas.length === 0 ? (
+            {encimadasOrdenadas.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-sm text-stone-400">
+                <td colSpan={7} className="px-4 py-8 text-center text-sm text-stone-400">
                   No hay encimadas cargadas.
                 </td>
               </tr>
             ) : (
-              encimadas.map((encimada) => {
+              encimadasOrdenadas.map((encimada) => {
                 const t = totales(encimada)
                 return (
                   <tr
@@ -168,6 +208,18 @@ export function CargaCapasPage() {
                         .join(', ') || '-'}
                     </td>
                     <td className={`${tdRight} font-semibold text-stone-900`}>{t.prendas}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleEliminar(encimada)
+                        }}
+                        className="rounded px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50"
+                      >
+                        Eliminar
+                      </button>
+                    </td>
                   </tr>
                 )
               })

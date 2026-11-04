@@ -2,6 +2,7 @@ import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
 import { useErpStore } from '../../../data/erpStore'
 import { formatARS } from '../../../utils/format'
+import { formatRollos } from '../../../utils/stock'
 import type { Articulo } from '../../../types'
 
 interface Props {
@@ -87,16 +88,16 @@ export function ArticuloDetalleModal({ articulo, onClose, onEdit, onDelete }: Pr
     (costoUnitario > 0 ? (gananciaUnitaria / costoUnitario) * 100 : 0)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4">
-      <div className="flex max-h-[92vh] w-full max-w-3xl flex-col rounded-xl bg-white shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/40 sm:items-center sm:p-4">
+      <div className="flex h-[100dvh] w-full max-w-3xl flex-col bg-white shadow-2xl sm:h-auto sm:max-h-[92vh] sm:rounded-xl">
         {/* Cabecera */}
-        <div className="flex items-center justify-between border-b border-stone-200 px-6 py-4">
-          <div>
-            <div className="flex items-center gap-2">
+        <div className="flex items-start justify-between gap-2 border-b border-stone-200 px-4 py-3 sm:items-center sm:px-6 sm:py-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono text-xs font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
                 {articulo.codigoArticulo}
               </span>
-              <h2 className="text-lg font-semibold text-stone-900">
+              <h2 className="truncate text-base font-semibold text-stone-900 sm:text-lg">
                 {articulo.nombre || 'Artículo sin nombre'}
               </h2>
             </div>
@@ -113,14 +114,14 @@ export function ArticuloDetalleModal({ articulo, onClose, onEdit, onDelete }: Pr
           <button
             type="button"
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-stone-400 hover:bg-stone-100 hover:text-stone-700"
           >
             ✕
           </button>
         </div>
 
         {/* Cuerpo */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 space-y-5 overflow-y-auto p-4 sm:space-y-6 sm:p-6">
           {/* 1. Resumen financiero total */}
           <div>
             <div className="flex items-center justify-between">
@@ -270,7 +271,7 @@ export function ArticuloDetalleModal({ articulo, onClose, onEdit, onDelete }: Pr
                             <span className="text-stone-600">{t.colorNombre}</span>
                           </div>
                         </td>
-                        <td className={tdRight}>{t.rollosUsados}</td>
+                        <td className={tdRight}>{formatRollos(t.rollosUsados)}</td>
                         <td className={tdRight}>
                           {Number(t.cantidadUsar || 0).toFixed(1)} {t.unidad === 'METRO' ? 'm' : 'kg'}
                         </td>
@@ -346,19 +347,19 @@ export function ArticuloDetalleModal({ articulo, onClose, onEdit, onDelete }: Pr
         </div>
 
         {/* Pie */}
-        <div className="flex items-center justify-between border-t border-stone-200 bg-white px-6 py-3">
-          <div className="text-xs text-stone-500">
+        <div className="flex flex-col gap-2 border-t border-stone-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div className="order-2 text-center text-[11px] text-stone-500 sm:order-1 sm:text-left sm:text-xs">
             {cantidad} prendas · Margen real: <strong className="text-emerald-700">{margenReal.toFixed(1)}%</strong>
           </div>
-          <div className="flex gap-2">
-            <Button variant="danger" onClick={onDelete}>
+          <div className="order-1 flex gap-2 sm:order-2">
+            <Button variant="danger" className="flex-1 sm:flex-none" onClick={onDelete}>
               Eliminar
             </Button>
-            <Button variant="secondary" onClick={onClose}>
+            <Button variant="secondary" className="flex-1 sm:flex-none" onClick={onClose}>
               Cerrar
             </Button>
-            <Button onClick={onEdit}>
-              Editar artículo
+            <Button className="flex-1 sm:flex-none" onClick={onEdit}>
+              Editar
             </Button>
           </div>
         </div>

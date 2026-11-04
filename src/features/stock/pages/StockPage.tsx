@@ -5,6 +5,7 @@ import { StockIndicator } from '../../../shared/components/StockIndicator'
 import { formatDate } from '../../../utils/format'
 import {
   formatCantidad,
+  formatRollos,
   getStockInfo,
   NIVEL_STOCK_BADGE,
   NIVEL_STOCK_LABEL,
@@ -140,7 +141,7 @@ export function StockPage() {
         <div className="rounded-lg border border-t-2 border-stone-200 border-t-amber-600/70 bg-white p-4">
           <div className="text-xs text-stone-500">Total invertido</div>
           <div className="mt-1 text-lg font-semibold text-stone-900"><Money value={totalInvertido} /></div>
-          <div className="mt-0.5 text-xs text-stone-400">USD ~ ${dolares.toFixed(2)}</div>
+          <div className="mt-0.5 text-xs text-stone-400">USD ~ ${dolares.toFixed(0)}</div>
         </div>
         <div className="rounded-lg border border-t-2 border-stone-200 border-t-amber-600/70 bg-white p-4">
           <div className="text-xs text-stone-500">Stock valorizado</div>
@@ -247,7 +248,7 @@ export function StockPage() {
                       detalle={false}
                     />
                   </td>
-                  <td className={tdRight}>{stock.disponibleRollos}</td>
+                  <td className={tdRight}>{formatRollos(stock.disponibleRollos)}</td>
                 </tr>
               ))
             )}

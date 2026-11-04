@@ -70,3 +70,15 @@ export function getStockInfo(comprado: number, usado: number): StockInfo {
 export function formatCantidad(cantidad: number, unidad: UnidadTela): string {
   return `${cantidad.toFixed(1)} ${unidad === 'METRO' ? 'm' : 'kg'}`
 }
+
+/** Redondea rollos a 2 decimales para permitir medias unidades (ej. 1,5 rollos). */
+export function redondearRollos(valor: number): number {
+  return Math.round((Number(valor) || 0) * 100) / 100
+}
+
+/** Muestra rollos con hasta 2 decimales y separador local (1.5 -> "1,5"). */
+export function formatRollos(valor: number): string {
+  return redondearRollos(valor).toLocaleString('es-AR', {
+    maximumFractionDigits: 2,
+  })
+}

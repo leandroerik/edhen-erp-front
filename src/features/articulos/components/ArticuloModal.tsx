@@ -6,6 +6,8 @@ import type { OpcionRollo } from '../stockRollos'
 import { usosStockDesdeDatos } from '../../../data/mock'
 import { useErpStore } from '../../../data/erpStore'
 import { formatARS } from '../../../utils/format'
+import { ordenarPorFechaYCodigoDesc } from '../../../utils/orden'
+import { formatRollos, redondearRollos } from '../../../utils/stock'
 import type { Articulo, AvioArticulo, UnidadTela } from '../../../types'
 
 interface Props {
@@ -149,11 +151,13 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
   )
   const [nombre, setNombre] = useState(articulo?.nombre || '')
   const [descripcion, setDescripcion] = useState(articulo?.descripcion || '')
+  const [mostrarDescripcion, setMostrarDescripcion] = useState(!!articulo?.descripcion)
   const [cantidadPrendas, setCantidadPrendas] = useState<number>(
     articulo ? Number(articulo.cantidadPrendas) || 0 : 12,
   )
 
   const [telas, setTelas] = useState<TelaLine[]>(() => telasIniciales(articulo, opcionesStock))
+  const [rollosEdit, setRollosEdit] = useState<Record<string, string>>({})
   const [selectedRolloKey, setSelectedRolloKey] = useState('')
   const [manoObra, setManoObra] = useState<number>(
     articulo ? Number(articulo.manoObra) || 0 : 0,
@@ -176,11 +180,16 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
   const [customUnidad, setCustomUnidad] = useState<UnidadTela>('METRO')
   const [customPrecio, setCustomPrecio] = useState<number>(0)
   const [customRollos, setCustomRollos] = useState<number>(1)
+  const [customRollosEdit, setCustomRollosEdit] = useState<string | null>(null)
   const [customCantidad, setCustomCantidad] = useState<number>(0)
   const [customProveedor, setCustomProveedor] = useState('')
 
   const encimadaSeleccionada = encimadas.find((encimada) => encimada.id === encimadaId)
   const itemsEncimada = encimadaSeleccionada?.items ?? []
+  const encimadasOrdenadas = useMemo(
+    () => ordenarPorFechaYCodigoDesc(encimadas, (e) => e.fecha, (e) => e.codigo),
+    [encimadas],
+  )
 
   const handleEncimadaChange = (id: string) => {
     setEncimadaId(id)
@@ -220,7 +229,7 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
   const telasCalculadas = telas.map((t) => {
     const rollosUsados = Math.max(
       0,
-      Math.min(t.disponibleRollos, Math.round(t.rollosUsar ?? t.disponibleRollos)),
+      Math.min(t.disponibleRollos, redondearRollos(t.rollosUsar ?? t.disponibleRollos)),
     )
     const cantidadPorRollo =
       t.disponibleRollos > 0 ? t.disponibleCantidad / t.disponibleRollos : 15
@@ -389,11 +398,14 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
       prev.map((t) => {
         if (t.id !== id) return t
         if (rawVal === '') return { ...t, rollosUsar: 0 }
-        const num = typeof rawVal === 'string' ? parseInt(rawVal, 10) : rawVal
+        const num =
+          typeof rawVal === 'string'
+            ? parseFloat(rawVal.replace(',', '.'))
+            : rawVal
         if (Number.isNaN(num)) return t
         const isCustom = t.compraCodigo === 'CUSTOM'
         const maxRollos = isCustom ? Math.max(t.disponibleRollos, num) : t.disponibleRollos
-        const clamped = Math.max(0, Math.min(maxRollos, num))
+        const clamped = Math.max(0, Math.min(maxRollos, redondearRollos(num)))
         return {
           ...t,
           disponibleRollos: maxRollos,
@@ -526,31 +538,34 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
     encimadaValida
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4">
-      <div className="flex max-h-[92vh] w-full max-w-3xl flex-col rounded-xl bg-white shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/40 sm:items-center sm:p-4">
+      <div className="flex h-[100dvh] w-full max-w-3xl flex-col bg-white shadow-2xl sm:h-auto sm:max-h-[92vh] sm:rounded-xl">
         {/* Cabecera */}
-        <div className="flex items-center justify-between border-b border-stone-200 px-5 py-3">
-          <div>
-            <h2 className="text-base font-semibold text-stone-900">
+        <div className="flex items-center justify-between border-b border-stone-200 px-4 py-3 sm:px-5">
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-semibold text-stone-900 sm:text-base">
               {articulo ? `Editar artículo · ${articulo.codigoArticulo}` : 'Nuevo artículo de producción'}
             </h2>
-            <p className="text-xs text-stone-500">
+            <p className="hidden text-xs text-stone-500 sm:block">
               Datos de la prenda, telas consumidas del stock y costeo de fabricación.
+            </p>
+            <p className="text-[11px] text-stone-500 sm:hidden">
+              Completá la prenda y elegí las telas del stock.
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="flex h-7 w-7 items-center justify-center rounded text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-stone-400 hover:bg-stone-100 hover:text-stone-700"
           >
             ✕
           </button>
         </div>
 
         {/* 1. Datos básicos de la prenda */}
-        <div className="border-b border-stone-200 bg-stone-50 px-5 py-3">
+        <div className="border-b border-stone-200 bg-stone-50 px-4 py-3 sm:px-5">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div>
+            <div className="order-1 sm:order-none">
               <label className={labelCls}>Código</label>
               <input
                 className={inputCls}
@@ -559,8 +574,17 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
                 onChange={(e) => setCodigoArticulo(e.target.value)}
               />
             </div>
-            <div>
-              <label className={labelCls}>Nombre de prenda</label>
+            <div className="order-3 col-span-2 sm:order-none sm:col-span-1">
+              <div className="flex items-center justify-between">
+                <label className={labelCls}>Nombre de prenda</label>
+                <button
+                  type="button"
+                  onClick={() => setMostrarDescripcion((prev) => !prev)}
+                  className="mb-1 text-[11px] font-medium text-amber-700 sm:hidden"
+                >
+                  {mostrarDescripcion ? 'Ocultar descripción' : '+ Descripción'}
+                </button>
+              </div>
               <input
                 className={inputCls}
                 value={nombre}
@@ -569,7 +593,11 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
                 placeholder="Ej. Camisa corta"
               />
             </div>
-            <div>
+            <div
+              className={`order-4 col-span-2 sm:order-none sm:col-span-1 ${
+                mostrarDescripcion ? '' : 'hidden sm:block'
+              }`}
+            >
               <label className={labelCls}>Descripción (opcional)</label>
               <input
                 className={inputCls}
@@ -579,7 +607,7 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
                 placeholder="Ej. Manga corta, cuello mao"
               />
             </div>
-            <div>
+            <div className="order-2 sm:order-none">
               <label className={labelCls}>Prendas a confeccionar</label>
               <input
                 type="number"
@@ -595,19 +623,23 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
         </div>
 
         {/* Cuerpo del formulario */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+        <div className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
           {!articulo && (
-            <div className="rounded-lg border border-stone-200 bg-white p-3.5 shadow-sm">
-              <div className="mb-2.5">
-                <span className="text-xs font-semibold uppercase tracking-wide text-stone-700">
-                  Encimada de origen (opcional)
+            <details className="group rounded-lg border border-stone-200 bg-white p-3.5 shadow-sm">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-stone-700">
+                    Encimada de origen (opcional)
+                  </span>
+                  <p className="mt-0.5 text-xs text-stone-500">
+                    Tocá para asociar este artículo a una encimada existente.
+                  </p>
+                </div>
+                <span className="shrink-0 text-xs text-stone-400 transition-transform group-open:rotate-180">
+                  ▾
                 </span>
-                <p className="mt-0.5 text-xs text-stone-500">
-                  Solo para artículos creados manualmente. Los artículos generados desde carga
-                  de capas ya quedan asociados automáticamente.
-                </p>
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              </summary>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className={labelCls}>Encimada</label>
                   <select
@@ -616,7 +648,7 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
                     onChange={(e) => handleEncimadaChange(e.target.value)}
                   >
                     <option value="">Sin asociar</option>
-                    {encimadas.map((encimada) => (
+                    {encimadasOrdenadas.map((encimada) => (
                       <option key={encimada.id} value={encimada.id}>
                         {encimada.codigo} · {encimada.items.length}{' '}
                         {encimada.items.length === 1 ? 'modelo' : 'modelos'}
@@ -647,7 +679,7 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
                   </select>
                 </div>
               </div>
-            </div>
+            </details>
           )}
 
           {/* 2. Telas del stock agrupadas por compra con chips de color (como EncimadaModal) */}
@@ -658,7 +690,7 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
                   Telas y rollos del stock
                 </span>
                 <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-medium text-stone-600">
-                  {telasCalculadas.length} {telasCalculadas.length === 1 ? 'color' : 'colores'} · {rollosTotales} {rollosTotales === 1 ? 'rollo' : 'rollos'}
+                  {telasCalculadas.length} {telasCalculadas.length === 1 ? 'color' : 'colores'} · {formatRollos(rollosTotales)} {rollosTotales === 1 ? 'rollo' : 'rollos'}
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-3">
@@ -712,7 +744,7 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
                       {compra.opciones.map((op) => (
                         <option key={op.key} value={op.key}>
                           {telasNombres.length > 1 ? `${op.telaNombre} · ` : ''}
-                          {op.colorNombre} · {op.rollosDisponibles}{' '}
+                          {op.colorNombre} · {formatRollos(op.rollosDisponibles)}{' '}
                           {op.rollosDisponibles === 1 ? 'rollo disponible' : 'rollos disponibles'}
                         </option>
                       ))}
@@ -819,16 +851,26 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
                       Cantidad de rollos
                     </label>
                     <input
-                      type="number"
-                      min="1"
-                      value={customRollos || ''}
-                      onChange={(e) =>
-                        setCustomRollos(
-                          e.target.value === ''
-                            ? 1
-                            : Math.max(1, parseInt(e.target.value, 10) || 1),
-                        )
-                      }
+                      type="text"
+                      inputMode="decimal"
+                      value={customRollosEdit ?? formatRollos(customRollos)}
+                      onFocus={(e) => {
+                        e.currentTarget.select()
+                        setCustomRollosEdit(String(redondearRollos(customRollos)))
+                      }}
+                      onChange={(e) => {
+                        const raw = e.target.value
+                        setCustomRollosEdit(raw)
+                        if (raw.trim() === '' || /[.,]$/.test(raw.trim())) return
+                        const parsed = parseFloat(raw.replace(',', '.'))
+                        if (!Number.isNaN(parsed)) {
+                          setCustomRollos(Math.max(0.5, redondearRollos(parsed)))
+                        }
+                      }}
+                      onBlur={() => {
+                        setCustomRollosEdit(null)
+                        setCustomRollos((prev) => Math.max(0.5, redondearRollos(prev)))
+                      }}
                       className="h-8 w-full rounded border border-stone-300 bg-white px-2 text-xs text-stone-900 focus:border-amber-600 focus:outline-none text-center font-bold"
                     />
                   </div>
@@ -931,11 +973,11 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
                         </div>
                         <div className="flex items-center gap-2 text-[11px] text-stone-500">
                           <span>
-                            Stock total: <strong className="font-semibold text-stone-700">{rollosDisponiblesGrupo} {rollosDisponiblesGrupo === 1 ? 'rollo' : 'rollos'}</strong>
+                            Stock total: <strong className="font-semibold text-stone-700">{formatRollos(rollosDisponiblesGrupo)} {rollosDisponiblesGrupo === 1 ? 'rollo' : 'rollos'}</strong>
                           </span>
                           <span>·</span>
                           <span>
-                            En uso: <strong className="font-semibold text-amber-800">{rollosGrupo}</strong>
+                            En uso: <strong className="font-semibold text-amber-800">{formatRollos(rollosGrupo)}</strong>
                           </span>
                           <span>·</span>
                           <span>
@@ -952,7 +994,7 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
                           return (
                             <div
                               key={tela.id}
-                              className={`flex items-center gap-2 rounded-full border bg-white py-1 pl-3 pr-1.5 shadow-sm transition-colors ${
+                              className={`flex w-full flex-wrap items-center gap-2 rounded-xl border bg-white px-2.5 py-2 shadow-sm transition-colors sm:w-auto sm:flex-nowrap sm:rounded-full sm:py-1 sm:pl-3 sm:pr-1.5 ${
                                 tela.rollosUsados === 0
                                   ? 'border-amber-400 bg-amber-50/50'
                                   : 'border-stone-200'
@@ -968,48 +1010,69 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
                                   {tela.colorNombre}
                                 </span>
                                 <span className="text-[10px] text-stone-400 leading-tight">
-                                  Disp: {tela.disponibleRollos} {tela.disponibleRollos === 1 ? 'rollo' : 'rollos'}
+                                  Disp: {formatRollos(tela.disponibleRollos)} {tela.disponibleRollos === 1 ? 'rollo' : 'rollos'}
                                 </span>
                               </div>
 
                               <div className="flex items-center gap-1 bg-stone-100/80 rounded-lg p-0.5 border border-stone-200">
                                 <button
                                   type="button"
-                                  disabled={tela.rollosUsados <= 1}
-                                  onClick={() => updateRollosUsar(tela.id, tela.rollosUsados - 1)}
+                                  disabled={tela.rollosUsados <= 0.5}
+                                  onClick={() => updateRollosUsar(tela.id, tela.rollosUsados - 0.5)}
                                   className="h-6 w-6 flex items-center justify-center rounded bg-white text-stone-700 font-bold hover:bg-stone-50 disabled:opacity-30 disabled:cursor-not-allowed shadow-xs text-xs"
-                                  title="Usar 1 rollo menos"
+                                  title="Usar medio rollo menos"
                                 >
                                   −
                                 </button>
                                 <input
-                                  type="number"
-                                  min={1}
-                                  max={tela.disponibleRollos}
+                                  type="text"
+                                  inputMode="decimal"
                                   className="h-6 w-11 rounded border border-stone-300 bg-white px-1 text-center text-xs font-bold text-stone-900 focus:border-amber-600 focus:outline-none"
-                                  value={tela.rollosUsar === 0 ? '' : tela.rollosUsar}
-                                  onFocus={(e) => e.currentTarget.select()}
-                                  onChange={(e) => updateRollosUsar(tela.id, e.target.value)}
+                                  value={
+                                    rollosEdit[tela.id] ??
+                                    (tela.rollosUsar === 0 ? '' : formatRollos(tela.rollosUsar))
+                                  }
+                                  onFocus={(e) => {
+                                    e.currentTarget.select()
+                                    setRollosEdit((prev) => ({
+                                      ...prev,
+                                      [tela.id]:
+                                        tela.rollosUsar === 0
+                                          ? ''
+                                          : String(redondearRollos(tela.rollosUsar)),
+                                    }))
+                                  }}
+                                  onChange={(e) => {
+                                    const raw = e.target.value
+                                    setRollosEdit((prev) => ({ ...prev, [tela.id]: raw }))
+                                    if (raw.trim() === '' || /[.,]$/.test(raw.trim())) return
+                                    updateRollosUsar(tela.id, raw)
+                                  }}
                                   onBlur={() => {
-                                    if (!tela.rollosUsar || tela.rollosUsar < 1) {
-                                      updateRollosUsar(tela.id, 1)
+                                    setRollosEdit((prev) => {
+                                      const next = { ...prev }
+                                      delete next[tela.id]
+                                      return next
+                                    })
+                                    if (!tela.rollosUsar || tela.rollosUsar < 0.5) {
+                                      updateRollosUsar(tela.id, 0.5)
                                     } else if (tela.rollosUsar > tela.disponibleRollos) {
                                       updateRollosUsar(tela.id, tela.disponibleRollos)
                                     }
                                   }}
-                                  title={`Rollos a consumir. Máximo disponible: ${tela.disponibleRollos}`}
+                                  title={`Rollos a consumir (podés usar medios). Máximo disponible: ${formatRollos(tela.disponibleRollos)}`}
                                 />
                                 <button
                                   type="button"
                                   disabled={tela.compraCodigo !== 'CUSTOM' && tela.rollosUsados >= tela.disponibleRollos}
-                                  onClick={() => updateRollosUsar(tela.id, tela.rollosUsados + 1)}
+                                  onClick={() => updateRollosUsar(tela.id, tela.rollosUsados + 0.5)}
                                   className="h-6 w-6 flex items-center justify-center rounded bg-white text-stone-700 font-bold hover:bg-stone-50 disabled:opacity-30 disabled:cursor-not-allowed shadow-xs text-xs"
-                                  title="Usar 1 rollo más"
+                                  title="Usar medio rollo más"
                                 >
                                   +
                                 </button>
                                 <span className="text-[11px] font-semibold text-stone-600 px-1">
-                                  / {tela.disponibleRollos}
+                                  / {formatRollos(tela.disponibleRollos)}
                                 </span>
                               </div>
 
@@ -1020,7 +1083,7 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
                                     : 'bg-stone-100 text-stone-600'
                                 }`}
                               >
-                                {esTodo ? 'Todo el stock' : `Quedan ${quedan}`}
+                                {esTodo ? 'Todo el stock' : `Quedan ${formatRollos(quedan)}`}
                               </span>
 
                               <span className="text-xs font-bold text-stone-800 tabular-nums pl-1">
@@ -1218,16 +1281,16 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
         </div>
 
         {/* Pie con acciones */}
-        <div className="flex items-center justify-between border-t border-stone-200 bg-white px-5 py-3">
-          <div className="text-xs text-stone-500">
+        <div className="flex flex-col gap-2 border-t border-stone-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+          <div className="order-2 text-center text-[11px] text-stone-500 sm:order-1 sm:text-left sm:text-xs">
             {cantPrendas} prendas · Costo total:{' '}
             <strong className="text-stone-800"><Money value={costoTotalProduccion} /></strong>
           </div>
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={onClose}>
+          <div className="order-1 flex gap-2 sm:order-2">
+            <Button variant="secondary" className="flex-1 sm:flex-none" onClick={onClose}>
               Cancelar
             </Button>
-            <Button disabled={!puedeGuardar} onClick={handleSave}>
+            <Button className="flex-1 sm:flex-none" disabled={!puedeGuardar} onClick={handleSave}>
               {articulo ? 'Guardar cambios' : 'Guardar artículo'}
             </Button>
           </div>

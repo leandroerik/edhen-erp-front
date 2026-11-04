@@ -3,6 +3,7 @@ import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
 import { mockColores, mockModelos } from '../../../data/mock'
 import { uid } from '../../../utils/format'
+import { formatRollos, redondearRollos } from '../../../utils/stock'
 import { comprasDesdeStock } from '../../articulos/stockRollos'
 import { usosStockDesdeDatos } from '../../../data/mock'
 import { useErpStore } from '../../../data/erpStore'
@@ -105,6 +106,7 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
   const [telasUsadas, setTelasUsadas] = useState<TelaUsadaEncimada[]>(
     encimada?.telasUsadas ?? [],
   )
+  const [rollosEdit, setRollosEdit] = useState<Record<string, string>>({})
   const [selectedRolloKey, setSelectedRolloKey] = useState('')
 
   const [items, setItems] = useState<EncimadaItem[]>(() => {
@@ -199,7 +201,7 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
     const opcion = opcionesStock.find((op) => op.key === selectedRolloKey)
     if (!opcion) return
 
-    const rollosUsados = Math.max(1, opcion.rollosDisponibles)
+    const rollosUsados = redondearRollos(opcion.rollosDisponibles)
     const promPorRollo =
       opcion.rollosDisponibles > 0
         ? opcion.cantidadDisponible / opcion.rollosDisponibles
@@ -251,11 +253,14 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
           if (rawVal === '') {
             return { ...t, rollosUsados: 0, cantidadUsada: 0, costoUsado: 0 }
           }
-          const num = typeof rawVal === 'string' ? parseInt(rawVal, 10) : rawVal
+          const num =
+            typeof rawVal === 'string'
+              ? parseFloat(rawVal.replace(',', '.'))
+              : rawVal
           if (Number.isNaN(num)) return t
           const isCustom = t.compraCodigo === 'CUSTOM'
           const maxRollos = isCustom ? Math.max(t.rollosDisponibles, num) : t.rollosDisponibles
-          const r = Math.max(0, Math.min(maxRollos, num))
+          const r = Math.max(0, Math.min(maxRollos, redondearRollos(num)))
           const promPorRollo =
             t.rollosDisponibles > 0 ? t.cantidadDisponible / t.rollosDisponibles : 15
           const cantidadUsada = Math.round(r * promPorRollo * 10) / 10
@@ -594,7 +599,7 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
                 ) : (
                   <>
                     {telasUsadas.length} {telasUsadas.length === 1 ? 'color' : 'colores'} ·{' '}
-                    {rollosTotales} {rollosTotales === 1 ? 'rollo' : 'rollos'} ·{' '}
+                    {formatRollos(rollosTotales)} {rollosTotales === 1 ? 'rollo' : 'rollos'} ·{' '}
                     <strong className="font-semibold text-stone-800">
                       <Money value={costoTotalTelas} />
                     </strong>
@@ -623,7 +628,7 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
                         {compra.opciones.map((op) => (
                           <option key={op.key} value={op.key}>
                             {telas.length > 1 ? `${op.telaNombre} · ` : ''}
-                            {op.colorNombre} · {op.rollosDisponibles}{' '}
+                            {op.colorNombre} · {formatRollos(op.rollosDisponibles)}{' '}
                             {op.rollosDisponibles === 1 ? 'rollo' : 'rollos'}
                           </option>
                         ))}
@@ -670,13 +675,15 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
                           <span className="text-[11px] text-stone-500">
                             Stock:{' '}
                             <strong className="text-stone-700">
-                              {grupo.telas.reduce(
-                                (a, t) => a + (Number(t.rollosDisponibles) || 0),
-                                0,
+                              {formatRollos(
+                                grupo.telas.reduce(
+                                  (a, t) => a + (Number(t.rollosDisponibles) || 0),
+                                  0,
+                                ),
                               )}{' '}
                               rollos disp.
                             </strong>{' '}
-                            · Usando: <strong className="text-amber-800">{rollosGrupo}</strong>
+                            · Usando: <strong className="text-amber-800">{formatRollos(rollosGrupo)}</strong>
                           </span>
                         </div>
                         <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -698,43 +705,62 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
                                 <div className="flex items-center gap-1 bg-stone-100/80 rounded-lg p-0.5 border border-stone-200">
                                   <button
                                     type="button"
-                                    disabled={tela.rollosUsados <= 1}
-                                    onClick={() => updateTelaRollos(tela.id, tela.rollosUsados - 1)}
+                                    disabled={tela.rollosUsados <= 0.5}
+                                    onClick={() => updateTelaRollos(tela.id, tela.rollosUsados - 0.5)}
                                     className="h-7 w-7 flex items-center justify-center rounded bg-white text-stone-700 font-bold hover:bg-stone-50 disabled:opacity-30 disabled:cursor-not-allowed shadow-xs text-xs"
-                                    title="Usar 1 rollo menos"
+                                    title="Usar medio rollo menos"
                                   >
                                     −
                                   </button>
                                   <input
-                                    type="number"
-                                    min={1}
-                                    max={tela.rollosDisponibles}
+                                    type="text"
+                                    inputMode="decimal"
                                     className="h-7 w-11 rounded border border-stone-300 bg-white px-1 text-center text-xs font-bold text-stone-900 focus:border-amber-600 focus:outline-none"
-                                    value={tela.rollosUsados === 0 ? '' : tela.rollosUsados}
-                                    onFocus={(e) => e.currentTarget.select()}
-                                    onChange={(e) =>
-                                      updateTelaRollos(tela.id, e.target.value)
+                                    value={
+                                      rollosEdit[tela.id] ??
+                                      (tela.rollosUsados === 0 ? '' : formatRollos(tela.rollosUsados))
                                     }
+                                    onFocus={(e) => {
+                                      e.currentTarget.select()
+                                      setRollosEdit((prev) => ({
+                                        ...prev,
+                                        [tela.id]:
+                                          tela.rollosUsados === 0
+                                            ? ''
+                                            : String(redondearRollos(tela.rollosUsados)),
+                                      }))
+                                    }}
+                                    onChange={(e) => {
+                                      const raw = e.target.value
+                                      setRollosEdit((prev) => ({ ...prev, [tela.id]: raw }))
+                                      if (raw.trim() === '' || /[.,]$/.test(raw.trim())) return
+                                      updateTelaRollos(tela.id, raw)
+                                    }}
                                     onBlur={() => {
-                                      if (!tela.rollosUsados || tela.rollosUsados < 1) {
-                                        updateTelaRollos(tela.id, 1)
+                                      setRollosEdit((prev) => {
+                                        const next = { ...prev }
+                                        delete next[tela.id]
+                                        return next
+                                      })
+                                      if (!tela.rollosUsados || tela.rollosUsados < 0.5) {
+                                        updateTelaRollos(tela.id, 0.5)
                                       } else if (tela.rollosUsados > tela.rollosDisponibles) {
                                         updateTelaRollos(tela.id, tela.rollosDisponibles)
                                       }
                                     }}
-                                    title={`Rollos a usar (máx. ${tela.rollosDisponibles} disponibles)`}
+                                    title={`Rollos a usar (podés usar medios). Máx. ${formatRollos(tela.rollosDisponibles)} disponibles`}
                                   />
                                   <button
                                     type="button"
                                     disabled={tela.rollosUsados >= tela.rollosDisponibles}
-                                    onClick={() => updateTelaRollos(tela.id, tela.rollosUsados + 1)}
+                                    onClick={() => updateTelaRollos(tela.id, tela.rollosUsados + 0.5)}
                                     className="h-7 w-7 flex items-center justify-center rounded bg-white text-stone-700 font-bold hover:bg-stone-50 disabled:opacity-30 disabled:cursor-not-allowed shadow-xs text-xs"
-                                    title="Usar 1 rollo más"
+                                    title="Usar medio rollo más"
                                   >
                                     +
                                   </button>
                                   <span className="text-[10px] font-semibold text-stone-600 px-1">
-                                    / {tela.rollosDisponibles}
+                                    / {formatRollos(tela.rollosDisponibles)}
                                   </span>
                                 </div>
                                 <span
@@ -743,7 +769,7 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
                                     : 'bg-stone-100 text-stone-600'
                                     }`}
                                 >
-                                  {esTodo ? 'Todo' : `Quedan ${quedan}`}
+                                  {esTodo ? 'Todo' : `Quedan ${formatRollos(quedan)}`}
                                 </span>
                                 <button
                                   type="button"
