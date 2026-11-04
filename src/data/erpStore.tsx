@@ -24,7 +24,7 @@ import type {
   TelaArticulo,
 } from '../types'
 import { fetchGasBootstrap, postGasAction, postGasBatch } from '../api/gasClient'
-import { anchoCodigo, renumerarConsecutivos } from '../utils/codigos'
+import { anchoCodigo, renumerarConsecutivos, siguienteId } from '../utils/codigos'
 import { redondearRollos } from '../utils/stock'
 
 const STORAGE_KEY = 'edhen_erp_data_v1'
@@ -174,6 +174,7 @@ function articuloDesdeItem(
   item: EncimadaItem,
   existente: Articulo | undefined,
   codigoSugerido: string,
+  idSugerido?: string,
 ): Articulo {
   const cantidadPrendas = totalCapas(encimada) * item.cantidad
   
@@ -245,7 +246,7 @@ function articuloDesdeItem(
   const margenReal = costoUnitario > 0 ? (gananciaUnitaria / costoUnitario) * 100 : 0
 
   return {
-    id: existente?.id ?? `art-${encimada.id}-${item.id}`,
+    id: existente?.id ?? idSugerido ?? `art-${encimada.id}-${item.id}`,
     codigoArticulo: existente?.codigoArticulo ?? codigoSugerido,
     nombre: item.modeloNombre.trim(),
     descripcion: `Encimada ${encimada.codigo}`,
@@ -686,7 +687,8 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
       )
       const existente = idx >= 0 ? next[idx] : undefined
       const codigo = existente?.codigoArticulo ?? `ART-${String(seq).padStart(ancho, '0')}`
-      const articulo = articuloDesdeItem(encimada, item, existente, codigo)
+      const idSugerido = existente?.id ?? siguienteId('art', next.map((a) => a.id))
+      const articulo = articuloDesdeItem(encimada, item, existente, codigo, idSugerido)
       articulosAfectados.push(articulo)
       if (idx >= 0) {
         next[idx] = articulo

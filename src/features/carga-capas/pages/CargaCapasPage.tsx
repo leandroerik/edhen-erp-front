@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { Button } from '../../../shared/components/Button'
 import { formatDate } from '../../../utils/format'
-import { siguienteCodigo } from '../../../utils/codigos'
+import { siguienteCodigo, siguienteId } from '../../../utils/codigos'
 import { ordenarPorFechaYCodigoDesc } from '../../../utils/orden'
 import { useErpStore } from '../../../data/erpStore'
 import type { Encimada } from '../../../types'
@@ -29,6 +29,10 @@ export function CargaCapasPage() {
   const nextCodigo = siguienteCodigo(
     'ENC',
     encimadas.map((e) => e.codigo),
+  )
+  const nextId = siguienteId(
+    'enc',
+    encimadas.map((e) => e.id),
   )
 
   // Más nuevas primero
@@ -230,6 +234,7 @@ export function CargaCapasPage() {
 
       {open && (
         <EncimadaModal
+          idSugerido={nextId}
           codigoSugerido={nextCodigo}
           onClose={() => setOpen(false)}
           onSave={saveEncimada}

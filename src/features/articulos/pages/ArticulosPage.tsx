@@ -3,7 +3,7 @@ import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
 import { Pagination } from '../../../shared/components/Pagination'
 import { useErpStore } from '../../../data/erpStore'
-import { siguienteCodigo } from '../../../utils/codigos'
+import { siguienteCodigo, siguienteId } from '../../../utils/codigos'
 import { ordenarPorCodigoDesc } from '../../../utils/orden'
 import type { Articulo } from '../../../types'
 import { ArticuloModal } from '../components/ArticuloModal'
@@ -26,6 +26,10 @@ export function ArticulosPage() {
   const nextCodigo = siguienteCodigo(
     'ART',
     articulos.map((a) => a.codigoArticulo),
+  )
+  const nextId = siguienteId(
+    'art',
+    articulos.map((a) => a.id),
   )
 
   // KPIs globales
@@ -405,7 +409,7 @@ export function ArticulosPage() {
           codigoSugerido={nextCodigo}
           onClose={() => setOpen(false)}
           onSave={(d) => {
-            addArticulo({ id: `art-${Date.now()}`, ...(d as Omit<Articulo, 'id'>) })
+            addArticulo({ id: nextId, ...(d as Omit<Articulo, 'id'>) })
           }}
         />
       )}

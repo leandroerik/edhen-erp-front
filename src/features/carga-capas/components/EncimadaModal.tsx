@@ -17,6 +17,7 @@ import type {
 
 interface Props {
   encimada?: Encimada
+  idSugerido?: string
   codigoSugerido: string
   onClose: () => void
   onSave: (encimada: Encimada) => void
@@ -97,7 +98,7 @@ function filasDesdeEncimada(encimada?: Encimada): CapaFila[] {
   return [...filas, { id: uid('fila'), color: '', capas: 0 }]
 }
 
-export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Props) {
+export function EncimadaModal({ encimada, idSugerido, codigoSugerido, onClose, onSave }: Props) {
   const [codigo, setCodigo] = useState(encimada?.codigo ?? codigoSugerido)
   const [fecha, setFecha] = useState(encimada?.fecha ?? new Date().toISOString().slice(0, 10))
   const [estado, setEstado] = useState<EstadoEncimada>(encimada?.estado ?? 'EN_CORTE')
@@ -210,7 +211,7 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
     const costoUsado = Math.round(cantidadUsada * opcion.precioUnitario)
 
     const nuevaTela: TelaUsadaEncimada = {
-      id: uid('tue'),
+      id: `tue-${telasUsadas.length + 1}`,
       stockKey: opcion.stockKey,
       loteId: opcion.loteId,
       compraCodigo: opcion.compraCodigo,
@@ -343,16 +344,16 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
   const handleSave = () => {
     if (!puedeGuardar) return
 
-    const cargas: CargaCapas[] = cargasValidas.map((f) => {
+    const cargas: CargaCapas[] = cargasValidas.map((f, idx) => {
       const color = mockColores.find(
         (c) => c.nombre.toLowerCase() === f.color.trim().toLowerCase(),
       )
       const telaPpal = telasUsadas[0]
       return {
-        id: uid('cc'),
+        id: `cc-${idx + 1}`,
         telaId: telaPpal?.telaId ?? 'tel-1',
         telaNombre: telaPpal?.telaNombre ?? 'Morley',
-        colorId: color?.id ?? uid('col'),
+        colorId: color?.id ?? `col-${idx + 1}`,
         colorNombre: f.color.trim(),
         unidad: telaPpal?.unidad ?? 'METRO',
         capas: f.capas,
@@ -362,13 +363,14 @@ export function EncimadaModal({ encimada, codigoSugerido, onClose, onSave }: Pro
       }
     })
 
+    const itemsNumerados: EncimadaItem[] = itemsValidos.map((it, idx) => ({ ...it, id: `ei-${idx + 1}` }))
     onSave({
-      id: encimada?.id ?? uid('enc'),
+      id: encimada?.id ?? idSugerido ?? uid('enc'),
       codigo: codigo.trim() || codigoSugerido,
       fecha,
       estado,
       largoCapa,
-      items: itemsValidos,
+      items: itemsNumerados,
       cargas,
       telasUsadas,
       notas: notas.trim() || undefined,

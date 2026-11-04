@@ -99,3 +99,16 @@ export function renumerarConsecutivos<T>(
 
   return { items: nuevos, cambiados, mapaCodigos }
 }
+
+
+/**
+ * Proximo ID consecutivo basado en los IDs existentes (ej. enc-1, enc-2 -> enc-3).
+ */
+export function siguienteId(prefijo: string, ids: Array<string | undefined>): string {
+  const regex = new RegExp(`^${prefijo}-(\\d+)$`, 'i')
+  const maximo = ids.reduce((acc, id) => {
+    const match = regex.exec(String(id || '').trim())
+    return match ? Math.max(acc, Number(match[1])) : acc
+  }, 0)
+  return `${prefijo}-${maximo + 1}`
+}
