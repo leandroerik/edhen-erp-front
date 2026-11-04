@@ -264,7 +264,7 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
 
   const costoTelaTotal = telasCalculadas.reduce((a, t) => a + t.costoUsado, 0)
   const rollosTotales = telasCalculadas.reduce((a, t) => a + t.rollosUsados, 0)
-  const costoTelaPorPrenda = cantPrendas > 0 ? Math.round(costoTelaTotal / cantPrendas) : 0
+  const costoTelaPorPrenda = cantPrendas > 0 ? Math.round((costoTelaTotal / cantPrendas) * 100) / 100 : 0
 
   const precioActualTela = (tela: {
     telaNombre: string
@@ -314,7 +314,7 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
     0,
   )
   const aviosPorPrenda =
-    aviosPorPrendaDirectos + (cantPrendas > 0 ? Math.round(aviosTotalesFijos / cantPrendas) : 0)
+    aviosPorPrendaDirectos + (cantPrendas > 0 ? Math.round((aviosTotalesFijos / cantPrendas) * 100) / 100 : 0)
   const aviosTotales = aviosTotalesFijos + aviosPorPrendaDirectos * cantPrendas
 
   // Costo total y unitario
@@ -324,7 +324,7 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
 
   // Precio y ganancia
   const margenNum = Number(margenGanancia) || 0
-  const precioSugerido = Math.round(costoUnitario * (1 + margenNum / 100))
+  const precioSugerido = Math.round(costoUnitario * (1 + margenNum / 100) * 100) / 100
   const precioVentaFinal = precioManual ? Number(precioVenta) || 0 : precioSugerido
   const gananciaUnitaria = precioVentaFinal - costoUnitario
   const gananciaTotal = gananciaUnitaria * cantPrendas
