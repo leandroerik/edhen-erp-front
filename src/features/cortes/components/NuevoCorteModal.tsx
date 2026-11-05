@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Button } from '../../../shared/components/Button'
-import { mockTalleres } from '../../../data/mock'
+import { useErpStore } from '../../../data/erpStore'
 import type { Corte, EstadoCorte } from '../../../types'
 
 interface Props {
@@ -15,6 +15,7 @@ const inputCls =
 const labelCls = 'mb-1 block text-xs font-medium text-stone-500'
 
 export function NuevoCorteModal({ open, codigoSugerido, onClose, onSave }: Props) {
+  const { talleres } = useErpStore()
   const [codigo, setCodigo] = useState(codigoSugerido)
   const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10))
   const [fechaEntrega, setFechaEntrega] = useState(
@@ -30,7 +31,7 @@ export function NuevoCorteModal({ open, codigoSugerido, onClose, onSave }: Props
 
   const handleTallerChange = (id: string) => {
     setTallerId(id)
-    const tObj = mockTalleres.find((t) => t.id === id)
+    const tObj = talleres.find((t) => t.id === id)
     if (tObj && precioPorPrenda === 0) {
       const sugerido = Object.values(tObj.precioPorPrendaPorModelo)[0] || 0
       if (sugerido > 0) setPrecioPorPrenda(sugerido)
@@ -40,7 +41,7 @@ export function NuevoCorteModal({ open, codigoSugerido, onClose, onSave }: Props
   const handleSave = () => {
     const cant = Math.max(1, Number(cantidadPrendas) || 1)
     const precio = Math.max(0, Number(precioPorPrenda) || 0)
-    const tObj = mockTalleres.find((t) => t.id === tallerId)
+    const tObj = talleres.find((t) => t.id === tallerId)
     const tallerNombre = tObj ? tObj.nombre : 'Sin asignar'
     const costoManoObra = cant * precio
 
@@ -154,7 +155,7 @@ export function NuevoCorteModal({ open, codigoSugerido, onClose, onSave }: Props
                 onChange={(e) => handleTallerChange(e.target.value)}
               >
                 <option value="">-- Sin asignar --</option>
-                {mockTalleres.map((t) => (
+                {talleres.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.nombre} ({t.especialidad || 'General'})
                   </option>

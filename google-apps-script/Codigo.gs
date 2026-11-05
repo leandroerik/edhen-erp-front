@@ -259,6 +259,9 @@ function doPost(e) {
       case 'guardarTaller':
         resultado = upsertFila(SHEETS.TALLERES, payload)
         break
+      case 'eliminarTaller':
+        resultado = eliminarFila(SHEETS.TALLERES, payload.id)
+        break
       case 'guardarProveedor':
         resultado = upsertFila(SHEETS.PROVEEDORES, payload)
         break

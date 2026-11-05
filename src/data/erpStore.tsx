@@ -648,6 +648,20 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
     setPagos((prev) => prev.filter((pago) => pago.id !== pagoId))
   }
 
+  const saveTaller = (taller: Taller) => {
+    setTalleres((prev) =>
+      prev.some((t) => t.id === taller.id)
+        ? prev.map((t) => (t.id === taller.id ? taller : t))
+        : [taller, ...prev],
+    )
+    postGasAction('guardarTaller', taller)
+  }
+
+  const deleteTaller = (tallerId: string) => {
+    setTalleres((prev) => prev.filter((t) => t.id !== tallerId))
+    postGasAction('eliminarTaller', { id: tallerId })
+  }
+
   const hidratarDatos = (datos: {
     articulos?: Articulo[]
     cortes?: Corte[]

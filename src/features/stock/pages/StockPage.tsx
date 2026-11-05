@@ -16,7 +16,7 @@ import { useErpStore } from '../../../data/erpStore'
 import { resumenPagoCorte } from '../../pagos/pagos.utils'
 import type { UnidadTela } from '../../../types'
 
-const th = 'px-4 py-3 text-xs font-semibold uppercase tracking-wider text-stone-500'
+const th = 'px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-stone-500'
 const thRight = `${th} text-right`
 const td = 'px-4 py-3 text-sm text-stone-900'
 const tdRight = `${td} text-right tabular-nums`
@@ -351,103 +351,100 @@ export function StockPage() {
 
   return (
     <div className="space-y-6">
-      {/* Cabecera con estilo EDHEN (Stone / Amber / White) */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-stone-200 pb-4">
+      {/* Cabecera */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-stone-900">Resumen</h1>
-          <p className="mt-0.5 text-xs sm:text-sm text-stone-500">
+          <h1 className="text-xl font-semibold text-stone-900 sm:text-2xl">Resumen</h1>
+          <p className="mt-0.5 text-xs text-stone-500 sm:text-sm">
             Métricas clave de taller, rendimiento por tela y valorización de inventario.
           </p>
         </div>
 
-        {/* Botones de navegación al estilo EDHEN */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Link
             to="/cortes"
-            className="inline-flex items-center gap-2 rounded-md border border-stone-300 bg-white px-3.5 py-2 text-xs font-medium text-stone-700 shadow-2xs hover:bg-stone-50 hover:text-stone-900 transition-colors"
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-50"
           >
-            <span>✂️</span>
             <span>Cortes</span>
             {cortesEnTaller > 0 && (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-[10px] text-amber-800">
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
                 {cortesEnTaller} en taller
               </span>
             )}
           </Link>
           <Link
             to="/pagos"
-            className="inline-flex items-center gap-2 rounded-md bg-amber-700 px-3.5 py-2 text-xs font-medium text-white shadow-xs hover:bg-amber-800 transition-colors"
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-amber-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-800"
           >
-            <span>💵</span>
             <span>Pagos</span>
             {totalAPagarTalleres > 0 && (
-              <span className="rounded-full bg-white/20 px-2 py-0.5 font-semibold text-[10px] text-white">
-                Saldo pend.
+              <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-semibold text-white">
+                Saldo <Money value={totalAPagarTalleres} />
               </span>
             )}
           </Link>
         </div>
       </div>
 
-      {/* Tarjetas KPI Superiores */}
+      {/* Tarjetas KPI */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {/* Total Invertido */}
-        <div className="rounded-lg border border-stone-200 bg-white p-3.5 shadow-xs">
+        <div className="rounded-xl border border-t-2 border-stone-200 border-t-amber-600/70 bg-white p-3 shadow-sm sm:p-3.5">
           <div className="text-xs font-medium text-stone-500">Total invertido</div>
-          <div className="mt-1 text-lg font-bold text-stone-900">
+          <div className="mt-1 text-lg font-semibold text-stone-900">
             <Money value={totalInvertidoCompras} />
           </div>
-          <div className="mt-0.5 text-xs text-stone-400">
+          <div className="mt-0.5 text-xs text-stone-500">
             USD ≈ ${(totalInvertidoCompras / (cotizacionDolar || 1)).toFixed(0)}
           </div>
         </div>
 
         {/* Stock valorizado */}
-        <div className="rounded-lg border border-stone-200 bg-white p-3.5 shadow-xs">
+        <div className="rounded-xl border border-t-2 border-stone-200 border-t-emerald-600/70 bg-white p-3 shadow-sm sm:p-3.5">
           <div className="text-xs font-medium text-stone-500">Stock valorizado</div>
-          <div className="mt-1 text-lg font-bold text-stone-900">
+          <div className="mt-1 text-lg font-semibold text-stone-900">
             <Money value={stockValorizadoTotal} />
           </div>
-          <div className="mt-0.5 text-xs text-amber-700 font-medium">
+          <div className="mt-0.5 text-xs font-medium text-emerald-700">
             USD ≈ ${(stockValorizadoTotal / (cotizacionDolar || 1)).toFixed(0)}
           </div>
         </div>
 
         {/* Cortes en taller */}
-        <div className="rounded-lg border border-stone-200 bg-white p-3.5 shadow-xs">
+        <div className="rounded-xl border border-t-2 border-stone-200 border-t-stone-400/70 bg-white p-3 shadow-sm sm:p-3.5">
           <div className="text-xs font-medium text-stone-500">Cortes en taller</div>
           <div className="mt-1 flex items-baseline gap-2">
-            <span className="text-lg font-bold text-stone-900">{cortesEnTaller}</span>
+            <span className="text-lg font-semibold text-stone-900">{cortesEnTaller}</span>
             <span className="text-xs text-stone-500">activos</span>
           </div>
-          <div className="mt-0.5 text-xs text-stone-400">
-            <Link to="/cortes" className="hover:underline text-amber-700">Ir a cortes →</Link>
+          <div className="mt-0.5 text-xs text-stone-500">
+            <Link to="/cortes" className="text-amber-700 hover:underline">Ir a cortes →</Link>
           </div>
         </div>
 
         {/* Cortes atrasados */}
-        <div className="rounded-lg border border-stone-200 bg-white p-3.5 shadow-xs">
+        <div className="rounded-xl border border-t-2 border-stone-200 border-t-rose-500/70 bg-white p-3 shadow-sm sm:p-3.5">
           <div className="text-xs font-medium text-stone-500">Cortes atrasados</div>
-          <div className="mt-1 text-lg font-bold text-rose-600">{cortesAtrasados}</div>
-          <div className="mt-0.5 text-xs text-stone-400">
+          <div className="mt-1 text-lg font-semibold text-rose-600">{cortesAtrasados}</div>
+          <div className="mt-0.5 text-xs text-stone-500">
             {cortesAtrasados > 0 ? 'Con demora' : 'Todo al día'}
           </div>
         </div>
 
         {/* Total a pagar talleres */}
-        <div className="rounded-lg border border-stone-200 bg-white p-3.5 shadow-xs">
+        <div className="rounded-xl border border-t-2 border-stone-200 border-t-amber-600/70 bg-white p-3 shadow-sm sm:p-3.5">
           <div className="text-xs font-medium text-stone-500">Saldo a pagar</div>
-          <div className="mt-1 text-lg font-bold text-stone-900">
+          <div className="mt-1 text-lg font-semibold text-stone-900">
             <Money value={totalAPagarTalleres} />
           </div>
-          <div className="mt-0.5 text-xs text-stone-400">
-            <Link to="/pagos" className="hover:underline text-amber-700">Ir a pagos →</Link>
+          <div className="mt-0.5 text-xs text-stone-500">
+            <Link to="/pagos" className="text-amber-700 hover:underline">Ir a pagos →</Link>
           </div>
         </div>
 
         {/* Cotización Dólar Persistida */}
-        <div className="rounded-lg border border-stone-200 bg-stone-50 p-3.5 shadow-xs">
-          <label className="block text-xs font-medium text-stone-600">Cotización USD</label>
+        <div className="rounded-xl border border-t-2 border-stone-200 border-t-stone-400/70 bg-white p-3 shadow-sm sm:p-3.5">
+          <label className="block text-xs font-medium text-stone-500">Cotización USD</label>
           <div className="mt-1 flex items-center gap-1.5">
             <span className="text-xs font-semibold text-stone-400">$</span>
             <input
@@ -463,33 +460,31 @@ export function StockPage() {
         </div>
       </div>
 
-      {/* ----------------------------------------------------------- */}
-      {/* GRÁFICO PROFESIONAL: CURVAS SUAVES POR TELA                */}
-      {/* ----------------------------------------------------------- */}
-      <div className="rounded-lg border border-stone-200 bg-white p-5 shadow-xs">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-stone-100 pb-3.5">
+      {/* Gráfico: rentabilidad por tela */}
+      <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex flex-col gap-3 border-b border-stone-100 pb-3.5 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-800">
-              Rentabilidad por Tela
+            <h2 className="text-base font-semibold text-stone-900">
+              Rentabilidad por tela
             </h2>
             <p className="mt-0.5 text-xs text-stone-500">
               Curvas de venta, costo y ganancia neta estimada por tipo de tela.
             </p>
           </div>
 
-          {/* Leyenda minimalista en sintonía con EDHEN */}
+          {/* Leyenda */}
           <div className="flex flex-wrap items-center gap-4 text-xs">
             <div className="flex items-center gap-1.5">
               <span className="inline-block h-2 w-3 rounded-full bg-emerald-600" />
-              <span className="font-semibold text-stone-800">Ganancia</span>
+              <span className="font-medium text-stone-700">Ganancia</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="inline-block h-2 w-3 rounded-full bg-stone-600" />
-              <span className="text-stone-600">Venta proyectada</span>
+              <span className="text-stone-500">Venta proyectada</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="inline-block h-2 w-3 rounded-full border border-dashed border-amber-600 bg-amber-50" />
-              <span className="text-stone-600">Costo / Inversión</span>
+              <span className="text-stone-500">Costo / Inversión</span>
             </div>
           </div>
         </div>
@@ -785,9 +780,7 @@ export function StockPage() {
         )}
       </div>
 
-      {/* ----------------------------------------------------------- */}
-      {/* SECCIÓN DE STOCK GENERAL: SIMPLIFICADO POR TELA            */}
-      {/* ----------------------------------------------------------- */}
+      {/* Stock general por tela */}
       <div className="space-y-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -822,7 +815,7 @@ export function StockPage() {
         </div>
 
         {/* Resumen badges */}
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-stone-200 bg-white px-3.5 py-2.5 text-xs">
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-stone-200 bg-white px-3.5 py-2.5 text-xs shadow-sm">
           <span className="font-medium text-stone-700">Estado de telas:</span>
           {(Object.keys(NIVEL_STOCK_LABEL) as NivelStock[]).map((nivel) => (
             <span
@@ -838,8 +831,77 @@ export function StockPage() {
           </span>
         </div>
 
-        {/* Tabla simplificada por tela */}
-        <div className="overflow-x-auto rounded-lg border border-stone-200 bg-white shadow-2xs">
+        {/* Vista Mobile: Tarjetas por tela */}
+        <div className="space-y-3 md:hidden">
+          {stockPaginado.length === 0 ? (
+            <div className="rounded-xl border border-stone-200 bg-white p-6 text-center text-sm text-stone-400">
+              No se encontraron telas con los filtros aplicados.
+            </div>
+          ) : (
+            stockPaginado.map((item) => (
+              <div
+                key={item.telaId}
+                className="rounded-xl border border-stone-200 bg-white p-3.5 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-2 border-b border-stone-100 pb-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-stone-900">
+                      {item.telaNombre}
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-stone-500">
+                      <span className="rounded bg-stone-100 px-1.5 py-0.5 text-[10px] font-medium text-stone-600">
+                        {item.coloresCount} {item.coloresCount === 1 ? 'color' : 'colores'}
+                      </span>
+                      <span className="truncate" title={item.coloresNombres.join(', ')}>
+                        {item.coloresNombres.slice(0, 3).join(', ')}
+                        {item.coloresNombres.length > 3 && ` +${item.coloresNombres.length - 3}`}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="text-xs font-semibold text-stone-900">
+                      <Money value={item.valorizadoPesos} />
+                    </div>
+                    <div className="text-[10px] text-stone-400">valorizado</div>
+                  </div>
+                </div>
+
+                <div className="mt-2 grid grid-cols-3 gap-2 rounded-lg bg-stone-50 p-2 text-xs">
+                  <div>
+                    <span className="block text-[10px] text-stone-500">Comprado</span>
+                    <strong className="text-stone-900">
+                      {formatCantidad(item.compradoCantidad, item.unidad)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-stone-500">Consumido</span>
+                    <strong className="text-stone-900">
+                      {formatCantidad(item.usadoCantidad, item.unidad)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-stone-500">Rollos disp.</span>
+                    <strong className="text-stone-900">
+                      {formatRollos(item.disponibleRollos)}
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="mt-2">
+                  <StockIndicator
+                    comprado={item.compradoCantidad}
+                    usado={item.usadoCantidad}
+                    unidad={item.unidad}
+                    detalle={false}
+                  />
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Vista Escritorio: Tabla por tela */}
+        <div className="hidden overflow-x-auto rounded-xl border border-stone-200 bg-white shadow-sm md:block">
           <table className="w-full divide-y divide-stone-200">
             <thead className="bg-stone-50">
               <tr>

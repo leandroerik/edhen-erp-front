@@ -130,42 +130,55 @@ export function ArticulosPage() {
 
       {/* Tarjetas KPI de resumen ejecutivo */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-xl border border-stone-200 bg-white p-3 shadow-sm sm:p-3.5">
-          <div className="text-xs font-medium text-stone-500">Catálogo de prendas</div>
-          <div className="mt-1 text-lg font-bold text-stone-900 sm:text-2xl">
-            {kpis.totalArticulos} <span className="text-sm font-normal text-stone-500">modelos</span>
+        <div className="min-w-0 rounded-xl border border-stone-200 bg-white p-3 shadow-sm sm:p-3.5">
+          <div className="text-[11px] font-medium leading-tight text-stone-500 sm:text-xs">
+            <span className="sm:hidden">Catálogo</span>
+            <span className="hidden sm:inline">Catálogo de prendas</span>
           </div>
-          <div className="mt-0.5 text-xs text-stone-500">
+          <div className="mt-1 text-base font-bold text-stone-900 sm:text-2xl">
+            {kpis.totalArticulos}{' '}
+            <span className="text-[11px] font-normal text-stone-500 sm:text-sm">modelos</span>
+          </div>
+          <div className="mt-0.5 text-[10px] text-stone-500 sm:text-xs">
             {kpis.totalPrendas} prendas en producción
           </div>
         </div>
 
-        <div className="rounded-xl border border-stone-200 bg-white p-3 shadow-sm sm:p-3.5">
-          <div className="text-xs font-medium text-stone-500">Inversión en producción</div>
-          <div className="mt-1 text-lg font-bold text-stone-900 sm:text-2xl">
+        <div className="min-w-0 rounded-xl border border-stone-200 bg-white p-3 shadow-sm sm:p-3.5">
+          <div className="text-[11px] font-medium leading-tight text-stone-500 sm:text-xs">
+            <span className="sm:hidden">Inversión</span>
+            <span className="hidden sm:inline">Inversión en producción</span>
+          </div>
+          <div className="mt-1 whitespace-nowrap text-base font-bold text-stone-900 sm:text-2xl">
             <Money value={kpis.inversionProduccion} />
           </div>
-          <div className="mt-0.5 text-xs text-stone-500">
+          <div className="mt-0.5 hidden text-xs text-stone-500 sm:block">
             Telas + mano de obra + avíos
           </div>
         </div>
 
-        <div className="rounded-xl border border-stone-200 bg-white p-3 shadow-sm sm:p-3.5">
-          <div className="text-xs font-medium text-stone-500">Venta proyectada</div>
-          <div className="mt-1 text-lg font-bold text-stone-900 sm:text-2xl">
+        <div className="min-w-0 rounded-xl border border-stone-200 bg-white p-3 shadow-sm sm:p-3.5">
+          <div className="text-[11px] font-medium leading-tight text-stone-500 sm:text-xs">
+            <span className="sm:hidden">Venta</span>
+            <span className="hidden sm:inline">Venta proyectada</span>
+          </div>
+          <div className="mt-1 whitespace-nowrap text-base font-bold text-stone-900 sm:text-2xl">
             <Money value={kpis.ventaProyectada} />
           </div>
-          <div className="mt-0.5 text-xs text-stone-500">
+          <div className="mt-0.5 hidden text-xs text-stone-500 sm:block">
             Total precio público
           </div>
         </div>
 
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 shadow-sm sm:p-3.5">
-          <div className="text-xs font-medium text-emerald-800">Ganancia potencial</div>
-          <div className="mt-1 text-lg font-bold text-emerald-900 sm:text-2xl">
+        <div className="min-w-0 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 shadow-sm sm:p-3.5">
+          <div className="text-[11px] font-medium leading-tight text-emerald-800 sm:text-xs">
+            <span className="sm:hidden">Ganancia</span>
+            <span className="hidden sm:inline">Ganancia potencial</span>
+          </div>
+          <div className="mt-1 whitespace-nowrap text-base font-bold text-emerald-900 sm:text-2xl">
             <Money value={kpis.gananciaTotal} />
           </div>
-          <div className="mt-0.5 text-xs font-medium text-emerald-700">
+          <div className="mt-0.5 text-[10px] font-medium text-emerald-700 sm:text-xs">
             Margen promedio: {kpis.margenPromedio.toFixed(1)}%
           </div>
         </div>
@@ -182,9 +195,8 @@ export function ArticulosPage() {
         ) : (
           articulosPaginados.map((a) => {
             const nombre = a.nombre || a.descripcion || 'Artículo'
-            const descripcion = a.nombre && a.descripcion ? a.descripcion : ''
             const margen = Number(a.margenReal || 0)
-            const telasCount = a.telas?.length || 0
+            const cantidad = Number(a.cantidadPrendas) || 0
 
             return (
               <div
@@ -200,18 +212,9 @@ export function ArticulosPage() {
                     <div className="truncate text-sm font-semibold text-stone-900">
                       {nombre}
                     </div>
-                    {(descripcion || telasCount > 0) && (
-                      <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-stone-500">
-                        {descripcion && <span className="truncate">{descripcion}</span>}
-                        {telasCount > 0 && (
-                          <span className="shrink-0 rounded bg-stone-100 px-1.5 py-0.5 text-[10px] text-stone-600">
-                            {telasCount} {telasCount === 1 ? 'tela' : 'telas'}
-                          </span>
-                        )}
-                      </div>
-                    )}
                   </div>
                   <span
+                    title="Rendimiento (margen sobre costo)"
                     className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
                       margen >= 100
                         ? 'bg-emerald-100 text-emerald-800'
@@ -226,30 +229,26 @@ export function ArticulosPage() {
 
                 <div className="mt-2.5 grid grid-cols-3 gap-2 rounded-lg bg-stone-50 px-2.5 py-2 text-xs">
                   <div>
-                    <div className="text-[10px] text-stone-500">Prendas</div>
-                    <div className="font-semibold text-stone-900">{a.cantidadPrendas}</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] text-stone-500">Costo u.</div>
-                    <div className="font-semibold text-stone-900">
-                      <Money value={a.costoUnitario} />
-                    </div>
-                  </div>
-                  <div className="text-right">
                     <div className="text-[10px] text-stone-500">Venta</div>
                     <div className="font-semibold text-stone-900">
                       <Money value={a.precioVenta} />
                     </div>
+                    <div className="text-[10px] text-stone-400">por prenda</div>
                   </div>
-                </div>
-
-                <div className="mt-2 flex items-center justify-between gap-2 text-xs">
-                  <span className="font-medium text-emerald-800">
-                    +<Money value={a.gananciaUnitaria} /> / prenda
-                  </span>
-                  <span className="font-bold text-emerald-900">
-                    Total: <Money value={a.gananciaTotal || 0} />
-                  </span>
+                  <div>
+                    <div className="text-[10px] text-stone-500">Ganancia</div>
+                    <div className="font-semibold text-emerald-800">
+                      +<Money value={a.gananciaTotal || 0} />
+                    </div>
+                    <div className="text-[10px] text-stone-400">total</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[10px] text-stone-500">Cantidad</div>
+                    <div className="font-semibold text-stone-900">{cantidad}</div>
+                    <div className="text-[10px] text-stone-400">
+                      {cantidad === 1 ? 'prenda' : 'prendas'}
+                    </div>
+                  </div>
                 </div>
               </div>
             )

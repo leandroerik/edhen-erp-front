@@ -5,7 +5,6 @@ import { Money } from '../../../shared/components/Money'
 import { formatDate } from '../../../utils/format'
 import { siguienteCodigo } from '../../../utils/codigos'
 import { ordenarPorFechaYCodigoDesc } from '../../../utils/orden'
-import { mockTalleres } from '../../../data/mock'
 import { useErpStore } from '../../../data/erpStore'
 import type { EstadoCorte } from '../../../types'
 import {
@@ -36,7 +35,7 @@ const ESTADO_STYLES: Record<string, string> = {
 }
 
 export function CortesPage() {
-  const { cortes, pagos, changeEstadoCorte, assignTallerCorte, addCorte } = useErpStore()
+  const { cortes, pagos, talleres, changeEstadoCorte, assignTallerCorte, addCorte } = useErpStore()
   const navigate = useNavigate()
   const [filtroEstado, setFiltroEstado] = useState<string>('TODOS')
   const [openModal, setOpenModal] = useState(false)
@@ -161,7 +160,7 @@ export function CortesPage() {
                     value={c.tallerId || ''}
                     onChange={(e) => {
                       const tId = e.target.value
-                      const tObj = mockTalleres.find((t) => t.id === tId)
+                      const tObj = talleres.find((t) => t.id === tId)
                       assignTallerCorte(
                         c.id,
                         tId,
@@ -175,7 +174,7 @@ export function CortesPage() {
                     }`}
                   >
                     <option value="">-- Asignar taller --</option>
-                    {mockTalleres.map((t) => (
+                    {talleres.map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.nombre}
                       </option>
@@ -323,7 +322,7 @@ export function CortesPage() {
                         value={c.tallerId || ''}
                         onChange={(e) => {
                           const tId = e.target.value
-                          const tObj = mockTalleres.find((t) => t.id === tId)
+                          const tObj = talleres.find((t) => t.id === tId)
                           assignTallerCorte(
                             c.id,
                             tId,
@@ -337,7 +336,7 @@ export function CortesPage() {
                         }`}
                       >
                         <option value="">-- Asignar taller --</option>
-                        {mockTalleres.map((t) => (
+                        {talleres.map((t) => (
                           <option key={t.id} value={t.id}>
                             {t.nombre}
                           </option>
