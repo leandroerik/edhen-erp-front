@@ -26,6 +26,7 @@ import type {
 import { fetchGasBootstrap, postGasAction, postGasBatch } from '../api/gasClient'
 import { anchoCodigo, renumerarConsecutivos, siguienteId } from '../utils/codigos'
 import { redondearRollos } from '../utils/stock'
+import { fechaISO, toISODate } from '../utils/format'
 
 const STORAGE_KEY = 'edhen_erp_data_v1'
 
@@ -43,11 +44,40 @@ function loadInitialData(): StoredData {
   if (typeof window === 'undefined') return {}
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
+    if (raw) return normalizarFechas(JSON.parse(raw))
   } catch (e) {
     console.error('Error leyendo localStorage', e)
   }
   return {}
+}
+
+/**
+ * Sheets devuelve las fechas como ISO completo (`2025-10-05T03:00:00.000Z`).
+ * Las guardamos siempre como `YYYY-MM-DD` para que no se corran de día por zona
+ * horaria y para que los `<input type="date">` las puedan mostrar.
+ */
+function normalizarFechas(data: StoredData): StoredData {
+  return {
+    ...data,
+    articulos: data.articulos?.map((articulo) => ({
+      ...articulo,
+      telas: (articulo.telas || []).map((tela) => ({
+        ...tela,
+        compraFecha: tela.compraFecha ? fechaISO(tela.compraFecha) : tela.compraFecha,
+      })),
+    })),
+    cortes: data.cortes?.map((corte) => ({
+      ...corte,
+      fecha: fechaISO(corte.fecha),
+      fechaEntregaPrometida: fechaISO(corte.fechaEntregaPrometida),
+    })),
+    encimadas: data.encimadas?.map((encimada) => ({
+      ...encimada,
+      fecha: fechaISO(encimada.fecha),
+    })),
+    pagos: data.pagos?.map((pago) => ({ ...pago, fecha: fechaISO(pago.fecha) })),
+    compras: data.compras?.map((compra) => ({ ...compra, fecha: fechaISO(compra.fecha) })),
+  }
 }
 
 function saveStoreData(data: StoredData) {
@@ -336,39 +366,49 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
 
       const counts: Record<string, number> = {}
 
+      const datos = normalizarFechas({
+        articulos: Array.isArray(data.articulos) ? data.articulos : undefined,
+        cortes: Array.isArray(data.cortes) ? data.cortes : undefined,
+        encimadas: Array.isArray(data.encimadas) ? data.encimadas : undefined,
+        pagos: Array.isArray(data.pagos) ? data.pagos : undefined,
+        compras: Array.isArray(data.compras) ? data.compras : undefined,
+        talleres: Array.isArray(data.talleres) ? data.talleres : undefined,
+        proveedores: Array.isArray(data.proveedores) ? data.proveedores : undefined,
+      })
+
       // Dejamos ART-/ENC- consecutivos también en los datos que ya existían en
       // la hoja (huecos por borrados viejos o códigos con otro relleno).
-      const artsBase = Array.isArray(data.articulos) ? data.articulos : articulos
-      const encsBase = Array.isArray(data.encimadas) ? data.encimadas : encimadas
+      const artsBase = datos.articulos ?? articulos
+      const encsBase = datos.encimadas ?? encimadas
       const normalizado = normalizarCodigos(artsBase, encsBase)
 
-      if (Array.isArray(data.articulos)) {
+      if (datos.articulos) {
         setArticulos(normalizado.articulos)
         counts.articulos = normalizado.articulos.length
       }
-      if (Array.isArray(data.cortes)) {
-        setCortes(data.cortes)
-        counts.cortes = data.cortes.length
+      if (datos.cortes) {
+        setCortes(datos.cortes)
+        counts.cortes = datos.cortes.length
       }
-      if (Array.isArray(data.encimadas)) {
+      if (datos.encimadas) {
         setEncimadas(normalizado.encimadas)
         counts.encimadas = normalizado.encimadas.length
       }
-      if (Array.isArray(data.pagos)) {
-        setPagos(data.pagos)
-        counts.pagos = data.pagos.length
+      if (datos.pagos) {
+        setPagos(datos.pagos)
+        counts.pagos = datos.pagos.length
       }
-      if (Array.isArray(data.compras)) {
-        setCompras(data.compras)
-        counts.compras = data.compras.length
+      if (datos.compras) {
+        setCompras(datos.compras)
+        counts.compras = datos.compras.length
       }
-      if (Array.isArray(data.talleres)) {
-        setTalleres(data.talleres)
-        counts.talleres = data.talleres.length
+      if (datos.talleres) {
+        setTalleres(datos.talleres)
+        counts.talleres = datos.talleres.length
       }
-      if (Array.isArray(data.proveedores)) {
-        setProveedores(data.proveedores)
-        counts.proveedores = data.proveedores.length
+      if (datos.proveedores) {
+        setProveedores(datos.proveedores)
+        counts.proveedores = datos.proveedores.length
       }
 
       // Persistimos solo los códigos que la normalización tuvo que corregir.
@@ -376,12 +416,12 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
 
       saveStoreData({
         articulos: normalizado.articulos,
-        cortes: data.cortes || cortes,
+        cortes: datos.cortes || cortes,
         encimadas: normalizado.encimadas,
-        pagos: data.pagos || pagos,
-        compras: data.compras || compras,
-        talleres: data.talleres || talleres,
-        proveedores: data.proveedores || proveedores,
+        pagos: datos.pagos || pagos,
+        compras: datos.compras || compras,
+        talleres: datos.talleres || talleres,
+        proveedores: datos.proveedores || proveedores,
       })
 
       const now = new Date()
@@ -406,26 +446,35 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     fetchGasBootstrap().then((data) => {
       if (!data) return
-      if (Array.isArray(data.articulos) && data.articulos.length > 0) {
-        setArticulos(data.articulos)
+      const datos = normalizarFechas({
+        articulos: Array.isArray(data.articulos) ? data.articulos : undefined,
+        cortes: Array.isArray(data.cortes) ? data.cortes : undefined,
+        encimadas: Array.isArray(data.encimadas) ? data.encimadas : undefined,
+        pagos: Array.isArray(data.pagos) ? data.pagos : undefined,
+        compras: Array.isArray(data.compras) ? data.compras : undefined,
+        talleres: Array.isArray(data.talleres) ? data.talleres : undefined,
+        proveedores: Array.isArray(data.proveedores) ? data.proveedores : undefined,
+      })
+      if (datos.articulos && datos.articulos.length > 0) {
+        setArticulos(datos.articulos)
       }
-      if (Array.isArray(data.cortes) && data.cortes.length > 0) {
-        setCortes(data.cortes)
+      if (datos.cortes && datos.cortes.length > 0) {
+        setCortes(datos.cortes)
       }
-      if (Array.isArray(data.encimadas) && data.encimadas.length > 0) {
-        setEncimadas(data.encimadas)
+      if (datos.encimadas && datos.encimadas.length > 0) {
+        setEncimadas(datos.encimadas)
       }
-      if (Array.isArray(data.pagos) && data.pagos.length > 0) {
-        setPagos(data.pagos)
+      if (datos.pagos && datos.pagos.length > 0) {
+        setPagos(datos.pagos)
       }
-      if (Array.isArray(data.compras) && data.compras.length > 0) {
-        setCompras(data.compras)
+      if (datos.compras && datos.compras.length > 0) {
+        setCompras(datos.compras)
       }
-      if (Array.isArray(data.talleres) && data.talleres.length > 0) {
-        setTalleres(data.talleres)
+      if (datos.talleres && datos.talleres.length > 0) {
+        setTalleres(datos.talleres)
       }
-      if (Array.isArray(data.proveedores) && data.proveedores.length > 0) {
-        setProveedores(data.proveedores)
+      if (datos.proveedores && datos.proveedores.length > 0) {
+        setProveedores(datos.proveedores)
       }
       setUltimoSync(new Date())
     })
@@ -498,8 +547,10 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
       const seq = nextCorteSeq(prev)
       const ancho = anchoCodigo('C', prev.map((c) => c.codigo))
       const codigoCorte = `C-${String(seq).padStart(ancho, '0')}`
-      const fechaHoy = new Date().toISOString().slice(0, 10)
-      const fechaEntrega = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString().slice(0, 10)
+      const fechaHoy = toISODate(new Date())
+      const entrega = new Date()
+      entrega.setDate(entrega.getDate() + 7)
+      const fechaEntrega = toISODate(entrega)
 
       const nuevoCorte: Corte = {
         id: corteId,

@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
 import { mockColores, mockModelos } from '../../../data/mock'
-import { uid } from '../../../utils/format'
+import { fechaISO, hoyISO, uid } from '../../../utils/format'
 import { formatRollos, redondearRollos } from '../../../utils/stock'
 import { comprasDesdeStock } from '../../articulos/stockRollos'
 import { usosStockDesdeDatos } from '../../../data/mock'
@@ -100,7 +100,9 @@ function filasDesdeEncimada(encimada?: Encimada): CapaFila[] {
 
 export function EncimadaModal({ encimada, idSugerido, codigoSugerido, onClose, onSave }: Props) {
   const [codigo, setCodigo] = useState(encimada?.codigo ?? codigoSugerido)
-  const [fecha, setFecha] = useState(encimada?.fecha ?? new Date().toISOString().slice(0, 10))
+  const [fecha, setFecha] = useState(() =>
+    encimada?.fecha ? fechaISO(encimada.fecha) : hoyISO(),
+  )
   const [estado, setEstado] = useState<EstadoEncimada>(encimada?.estado ?? 'EN_CORTE')
   const [notas, setNotas] = useState(encimada?.notas ?? '')
   const [filas, setFilas] = useState<CapaFila[]>(() => filasDesdeEncimada(encimada))

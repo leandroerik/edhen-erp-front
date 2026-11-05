@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button } from '../../../shared/components/Button'
 import { useErpStore } from '../../../data/erpStore'
+import { hoyISO, toISODate } from '../../../utils/format'
 import type { Corte, EstadoCorte } from '../../../types'
 
 interface Props {
@@ -17,10 +18,12 @@ const labelCls = 'mb-1 block text-xs font-medium text-stone-500'
 export function NuevoCorteModal({ open, codigoSugerido, onClose, onSave }: Props) {
   const { talleres } = useErpStore()
   const [codigo, setCodigo] = useState(codigoSugerido)
-  const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10))
-  const [fechaEntrega, setFechaEntrega] = useState(
-    new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString().slice(0, 10),
-  )
+  const [fecha, setFecha] = useState(() => hoyISO())
+  const [fechaEntrega, setFechaEntrega] = useState(() => {
+    const entrega = new Date()
+    entrega.setDate(entrega.getDate() + 7)
+    return toISODate(entrega)
+  })
   const [modeloNombre, setModeloNombre] = useState('')
   const [cantidadPrendas, setCantidadPrendas] = useState<number>(20)
   const [tallerId, setTallerId] = useState('')

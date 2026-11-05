@@ -205,6 +205,7 @@ export function StockPage() {
   // Filtros tabla de stock por tela
   const [busqueda, setBusqueda] = useState('')
   const [soloBajoStock, setSoloBajoStock] = useState(false)
+  const [soloConStock, setSoloConStock] = useState(true)
   const [paginaStock, setPaginaStock] = useState(1)
   const [filasStock, setFilasStock] = useState(FILAS_POR_PAGINA)
 
@@ -213,17 +214,19 @@ export function StockPage() {
   const stockFiltrado = useMemo(() => {
     return stockPorTela
       .filter((s) => {
+        if (soloConStock && s.disponibleCantidad <= 0) return false
         if (soloBajoStock && s.info.nivel === 'OK') return false
         if (!texto) return true
         return s.telaNombre.toLowerCase().includes(texto) ||
           s.coloresNombres.some((c) => c.toLowerCase().includes(texto))
       })
       .sort((a, b) => {
-        const diff = a.info.disponiblePct - b.info.disponiblePct
+        // Mayor stock disponible primero
+        const diff = b.disponibleCantidad - a.disponibleCantidad
         if (diff !== 0) return diff
         return a.telaNombre.localeCompare(b.telaNombre)
       })
-  }, [stockPorTela, soloBajoStock, texto])
+  }, [stockPorTela, soloConStock, soloBajoStock, texto])
 
   const totalPaginasStock = Math.max(1, Math.ceil(stockFiltrado.length / filasStock))
   const paginaStockActual = Math.min(Math.max(1, paginaStock), totalPaginasStock)
@@ -786,7 +789,7 @@ export function StockPage() {
           <div>
             <h2 className="text-base font-semibold text-stone-900">Stock General por Tela</h2>
             <p className="mt-0.5 text-xs text-stone-500">
-              Vista consolidada por tipo de tela para control rápido de disponibilidad y valor.
+              Vista consolidada por tipo de tela, ordenada de mayor a menor stock disponible.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -799,6 +802,18 @@ export function StockPage() {
                 setPaginaStock(1)
               }}
             />
+            <label className="inline-flex h-9 items-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-xs font-medium text-stone-700">
+              <input
+                type="checkbox"
+                checked={soloConStock}
+                onChange={(e) => {
+                  setSoloConStock(e.target.checked)
+                  setPaginaStock(1)
+                }}
+                className="accent-amber-600"
+              />
+              Solo con stock
+            </label>
             <label className="inline-flex h-9 items-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-xs font-medium text-stone-700">
               <input
                 type="checkbox"

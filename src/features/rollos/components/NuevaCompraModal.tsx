@@ -3,6 +3,7 @@ import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
 import { mockTelas, mockColores } from '../../../data/mock'
 import { useErpStore } from '../../../data/erpStore'
+import { hoyISO } from '../../../utils/format'
 import type { LoteColor, UnidadTela } from '../../../types'
 
 interface Props {
@@ -45,7 +46,7 @@ export function NuevaCompraModal({ open, onClose, onSave }: Props) {
     }
     return Array.from(mapa.entries()).map(([id, nombre]) => ({ id, nombre }))
   })()
-  const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10))
+  const [fecha, setFecha] = useState(() => hoyISO())
   const [proveedor, setProveedor] = useState(proveedoresSugeridos[0]?.nombre || '')
   const [tela, setTela] = useState(mockTelas[0]?.nombre || '')
   const [unidad, setUnidad] = useState<UnidadTela>('METRO')

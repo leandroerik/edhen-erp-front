@@ -2,11 +2,11 @@ import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
-import { formatDate } from '../../../utils/format'
+import { fechaISO, formatDate, hoyISO } from '../../../utils/format'
 import { siguienteCodigo } from '../../../utils/codigos'
 import { ordenarPorFechaYCodigoDesc } from '../../../utils/orden'
 import { useErpStore } from '../../../data/erpStore'
-import type { EstadoCorte } from '../../../types'
+import type { Corte, EstadoCorte } from '../../../types'
 import {
   ESTADO_PAGO_LABEL,
   ESTADO_PAGO_STYLES,
@@ -14,9 +14,9 @@ import {
 } from '../../pagos/pagos.utils'
 import { NuevoCorteModal } from '../components/NuevoCorteModal'
 
-const th = 'px-4 py-3 text-xs font-semibold uppercase tracking-wider text-stone-500'
+const th = 'px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-stone-500'
 const thRight = `${th} text-right`
-const td = 'px-4 py-3 text-sm text-stone-900'
+const td = 'px-4 py-2.5 text-sm text-stone-900'
 const tdRight = `${td} text-right tabular-nums`
 
 const ESTADO_TABS: { id: string; label: string }[] = [
@@ -27,6 +27,13 @@ const ESTADO_TABS: { id: string; label: string }[] = [
   { id: 'PAGADO', label: 'Pagado' },
 ]
 
+const ESTADOS_CORTE: { value: EstadoCorte; label: string }[] = [
+  { value: 'PREPARADO', label: 'Preparado' },
+  { value: 'EN_TALLER', label: 'En taller' },
+  { value: 'ENTREGADO', label: 'Entregado' },
+  { value: 'PAGADO', label: 'Pagado' },
+]
+
 const ESTADO_STYLES: Record<string, string> = {
   PREPARADO: 'bg-stone-100 text-stone-800 border-stone-300',
   EN_TALLER: 'bg-amber-100 text-amber-800 border-amber-300',
@@ -34,51 +41,137 @@ const ESTADO_STYLES: Record<string, string> = {
   PAGADO: 'bg-emerald-100 text-emerald-800 border-emerald-300',
 }
 
+function corteAtrasado(corte: Corte, hoy: string): boolean {
+  if (corte.estado === 'ENTREGADO' || corte.estado === 'PAGADO') return false
+  const vence = fechaISO(corte.fechaEntregaPrometida)
+  return !!corte.atrasado || (!!vence && vence < hoy)
+}
+
 export function CortesPage() {
   const { cortes, pagos, talleres, changeEstadoCorte, assignTallerCorte, addCorte } = useErpStore()
   const navigate = useNavigate()
   const [filtroEstado, setFiltroEstado] = useState<string>('TODOS')
+  const [busqueda, setBusqueda] = useState('')
   const [openModal, setOpenModal] = useState(false)
 
   const nextCodigo = siguienteCodigo(
     'C',
     cortes.map((c) => c.codigo),
   )
+  const hoy = hoyISO()
+
+  const kpis = useMemo(() => {
+    let activos = 0
+    let atrasados = 0
+    let prendasEnTaller = 0
+    let saldo = 0
+
+    for (const c of cortes) {
+      if (c.estado === 'PREPARADO' || c.estado === 'EN_TALLER') {
+        activos += 1
+        prendasEnTaller += Number(c.cantidadPrendas) || 0
+      }
+
+      if (corteAtrasado(c, hoy)) {
+        atrasados += 1
+      }
+
+      const resumen = resumenPagoCorte(c, pagos)
+      if (resumen.saldo > 0) saldo += resumen.saldo
+    }
+
+    return { activos, atrasados, prendasEnTaller, saldo }
+  }, [cortes, pagos, hoy])
+
+  const conteos = useMemo(() => {
+    const mapa: Record<string, number> = { TODOS: cortes.length }
+    for (const c of cortes) {
+      mapa[c.estado] = (mapa[c.estado] ?? 0) + 1
+    }
+    return mapa
+  }, [cortes])
 
   const cortesFiltrados = useMemo(() => {
-    const lista =
-      filtroEstado === 'TODOS'
-        ? cortes
-        : cortes.filter((c) => c.estado === filtroEstado)
+    const q = busqueda.trim().toLowerCase()
+    const lista = (filtroEstado === 'TODOS'
+      ? cortes
+      : cortes.filter((c) => c.estado === filtroEstado)
+    ).filter((c) =>
+      q
+        ? `${c.codigo} ${c.modeloNombre} ${c.tallerNombre ?? ''}`
+            .toLowerCase()
+            .includes(q)
+        : true,
+    )
+
     // Más nuevos primero
     return ordenarPorFechaYCodigoDesc(
       lista,
       (c) => c.fecha,
       (c) => c.codigo,
     )
-  }, [cortes, filtroEstado])
+  }, [cortes, filtroEstado, busqueda])
 
   return (
     <div className="space-y-4">
-      {/* Encabezado */}
+      {/* Cabecera */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-stone-900">Cortes</h1>
-          <p className="mt-0.5 text-sm text-stone-500">
-            Asigná talleres a cada corte y gestioná los estados del proceso. El estado
-            de pago se calcula aparte en Pagos a talleres.
+          <h1 className="text-xl font-semibold text-stone-900 sm:text-2xl">Cortes</h1>
+          <p className="mt-0.5 text-xs text-stone-500 sm:text-sm">
+            Asigná talleres y seguí el estado de cada corte. Los pagos se registran aparte.
           </p>
         </div>
-        <Button onClick={() => setOpenModal(true)}>+ Nuevo corte</Button>
+        <Button className="w-full sm:w-auto" onClick={() => setOpenModal(true)}>
+          + Nuevo corte
+        </Button>
       </div>
 
-      {/* Botones de acceso rápido a estados */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 sm:flex-wrap">
+      {/* KPIs */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-xl border border-t-2 border-stone-200 border-t-sky-500/70 bg-white p-3 shadow-sm sm:p-3.5">
+          <div className="text-[11px] font-medium text-stone-500 sm:text-xs">Activos</div>
+          <div className="mt-1 text-lg font-semibold text-stone-900">{kpis.activos}</div>
+          <div className="mt-0.5 text-[10px] text-stone-500 sm:text-xs">preparado / en taller</div>
+        </div>
+
+        <div
+          className={`rounded-xl border border-t-2 p-3 shadow-sm sm:p-3.5 ${
+            kpis.atrasados > 0
+              ? 'border-stone-200 border-t-red-500/70 bg-red-50/40'
+              : 'border-stone-200 border-t-stone-300 bg-white'
+          }`}
+        >
+          <div
+            className={`text-[11px] font-medium sm:text-xs ${
+              kpis.atrasados > 0 ? 'text-red-700' : 'text-stone-500'
+            }`}
+          >
+            Atrasados
+          </div>
+          <div className="mt-1 text-lg font-semibold text-stone-900">{kpis.atrasados}</div>
+          <div className="mt-0.5 text-[10px] text-stone-500 sm:text-xs">fuera de fecha</div>
+        </div>
+
+        <div className="rounded-xl border border-t-2 border-stone-200 border-t-amber-600/70 bg-white p-3 shadow-sm sm:p-3.5">
+          <div className="text-[11px] font-medium text-stone-500 sm:text-xs">Prendas</div>
+          <div className="mt-1 text-lg font-semibold text-stone-900">{kpis.prendasEnTaller}</div>
+          <div className="mt-0.5 text-[10px] text-stone-500 sm:text-xs">en taller</div>
+        </div>
+
+        <div className="rounded-xl border border-t-2 border-stone-200 border-t-emerald-600/70 bg-white p-3 shadow-sm sm:p-3.5">
+          <div className="text-[11px] font-medium text-stone-500 sm:text-xs">Saldo</div>
+          <div className="mt-1 whitespace-nowrap text-lg font-semibold text-stone-900">
+            <Money value={kpis.saldo} />
+          </div>
+          <div className="mt-0.5 text-[10px] text-stone-500 sm:text-xs">a pagar a talleres</div>
+        </div>
+      </div>
+
+      {/* Filtros por estado */}
+      <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:pb-0">
         {ESTADO_TABS.map((tab) => {
-          const count =
-            tab.id === 'TODOS'
-              ? cortes.length
-              : cortes.filter((c) => c.estado === tab.id).length
+          const count = conteos[tab.id] ?? 0
           const active = filtroEstado === tab.id
 
           return (
@@ -86,7 +179,7 @@ export function CortesPage() {
               key={tab.id}
               type="button"
               onClick={() => setFiltroEstado(tab.id)}
-              className={`shrink-0 inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
                 active
                   ? 'bg-stone-900 text-white shadow-sm'
                   : 'border border-stone-200 bg-white text-stone-600 hover:border-stone-300 hover:bg-stone-50 hover:text-stone-900'
@@ -94,10 +187,8 @@ export function CortesPage() {
             >
               <span>{tab.label}</span>
               <span
-                className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums leading-none ${
-                  active
-                    ? 'bg-stone-700 text-stone-100'
-                    : 'bg-stone-100 text-stone-500'
+                className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none tabular-nums ${
+                  active ? 'bg-stone-700 text-stone-100' : 'bg-stone-100 text-stone-500'
                 }`}
               >
                 {count}
@@ -107,56 +198,89 @@ export function CortesPage() {
         })}
       </div>
 
-      {/* Vista Mobile: Tarjetas con pago rápido de cortes */}
+      {/* Buscador */}
+      {cortes.length > 0 && (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <input
+            className="h-9 w-full rounded-md border border-stone-300 bg-white px-3 text-sm focus:border-amber-600 focus:outline-none sm:w-72"
+            placeholder="Buscar por código, prenda o taller..."
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+          />
+          <span className="text-xs text-stone-500">
+            {cortesFiltrados.length} de {cortes.length} cortes
+          </span>
+        </div>
+      )}
+
+      {/* Vista Mobile: Tarjetas */}
       <div className="space-y-3 md:hidden">
         {cortesFiltrados.length === 0 ? (
-          <div className="rounded-lg border border-stone-200 bg-white p-6 text-center text-sm text-stone-400">
-            No hay cortes registrados en este estado.
+          <div className="rounded-xl border border-stone-200 bg-white p-8 text-center text-sm text-stone-500 shadow-sm">
+            {busqueda
+              ? 'No se encontraron cortes con esa búsqueda.'
+              : 'No hay cortes registrados en este estado.'}
           </div>
         ) : (
           cortesFiltrados.map((c) => {
-            const totalTaller =
-              (Number(c.cantidadPrendas) || 0) * (Number(c.precioPorPrenda) || 0)
+            const cantidad = Number(c.cantidadPrendas) || 0
+            const totalTaller = cantidad * (Number(c.precioPorPrenda) || 0)
             const sinTaller = !c.tallerId || c.tallerId === 'sin-taller'
             const resumenPago = resumenPagoCorte(c, pagos)
+            const atrasado = corteAtrasado(c, hoy)
+            const enviadas = c.seguimiento?.enviadas ?? cantidad
+            const entregadas = c.seguimiento?.entregadas ?? 0
 
             return (
               <div
                 key={c.id}
-                className="rounded-lg border border-stone-200 bg-white p-3.5 shadow-sm space-y-3"
+                className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm"
               >
-                {/* Cabecera de la tarjeta: Código, Prenda y Estado */}
-                <div className="flex items-start justify-between gap-2 border-b border-stone-100 pb-2.5">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-stone-900">{c.codigo}</span>
-                      <span className="text-xs text-stone-500">{formatDate(c.fecha)}</span>
+                {/* Código, prenda y estado */}
+                <div className="flex items-start justify-between gap-2 px-3.5 pt-3.5">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px]">
+                      <span className="font-mono font-semibold text-amber-900">
+                        {c.codigo}
+                      </span>
+                      <span className="text-stone-300">·</span>
+                      <span className="text-stone-400">{formatDate(c.fecha)}</span>
+                      {atrasado && (
+                        <span
+                          title={`Entrega prometida: ${formatDate(c.fechaEntregaPrometida)}`}
+                          className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700"
+                        >
+                          Atrasado
+                        </span>
+                      )}
                     </div>
-                    <h3 className="text-sm font-medium text-stone-900 mt-0.5">{c.modeloNombre}</h3>
+                    <h3 className="mt-0.5 truncate text-sm font-semibold text-stone-900">
+                      {c.modeloNombre}
+                    </h3>
                   </div>
 
                   <select
+                    aria-label={`Estado del corte ${c.codigo}`}
                     value={c.estado}
                     onChange={(e) =>
                       changeEstadoCorte(c.id, e.target.value as EstadoCorte)
                     }
-                    className={`cursor-pointer rounded-full border px-2.5 py-1 text-xs font-semibold focus:outline-none transition-colors ${
+                    className={`shrink-0 cursor-pointer rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors focus:outline-none ${
                       ESTADO_STYLES[c.estado] || 'bg-stone-100 text-stone-800'
                     }`}
                   >
-                    <option value="PREPARADO">Preparado</option>
-                    <option value="EN_TALLER">En taller</option>
-                    <option value="ENTREGADO">Entregado</option>
-                    <option value="PAGADO">Pagado</option>
+                    {ESTADOS_CORTE.map((e) => (
+                      <option key={e.value} value={e.value}>
+                        {e.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
                 {/* Taller asignado */}
-                <div>
-                  <label className="text-[11px] font-medium text-stone-500 block mb-1">
-                    Taller confección
-                  </label>
+                <div className="mt-2.5 px-3.5">
                   <select
+                    aria-label={`Taller del corte ${c.codigo}`}
                     value={c.tallerId || ''}
                     onChange={(e) => {
                       const tId = e.target.value
@@ -167,9 +291,9 @@ export function CortesPage() {
                         tObj ? tObj.nombre : 'Sin asignar',
                       )
                     }}
-                    className={`h-9 w-full rounded border px-2 text-xs font-medium focus:border-amber-600 focus:outline-none transition-colors ${
+                    className={`h-8 w-full rounded-md border px-2 text-xs font-medium transition-colors focus:border-amber-600 focus:outline-none ${
                       sinTaller
-                        ? 'border-amber-300 bg-amber-50 text-amber-900 font-semibold'
+                        ? 'border-amber-300 bg-amber-50 font-semibold text-amber-900'
                         : 'border-stone-300 bg-white text-stone-900'
                     }`}
                   >
@@ -182,19 +306,23 @@ export function CortesPage() {
                   </select>
                 </div>
 
-                {/* Valores: Prendas, $/prenda y Total */}
-                <div className="grid grid-cols-3 gap-2 rounded-lg bg-stone-50 p-2.5 text-xs">
+                {/* Prendas, $/prenda y total */}
+                <div className="mx-3.5 mt-2.5 grid grid-cols-3 gap-2 rounded-lg bg-stone-50 px-2.5 py-2 text-xs">
                   <div>
-                    <span className="text-stone-500 block text-[10px]">Prendas</span>
-                    <strong className="text-sm text-stone-900 font-bold">{c.cantidadPrendas}</strong>
+                    <div className="text-[10px] text-stone-500">Prendas</div>
+                    <div className="font-semibold text-stone-900">{cantidad}</div>
+                    <div className="text-[10px] text-stone-400">
+                      Ent. {entregadas}/{enviadas}
+                    </div>
                   </div>
                   <div>
-                    <span className="text-stone-500 block text-[10px]">$/prenda</span>
-                    <div className="flex items-center gap-0.5 mt-0.5">
-                      <span className="text-stone-400 text-xs">$</span>
+                    <div className="text-[10px] text-stone-500">$/prenda</div>
+                    <div className="mt-0.5 flex items-center gap-0.5">
+                      <span className="text-stone-400">$</span>
                       <input
                         type="number"
                         min="0"
+                        aria-label={`Precio por prenda del corte ${c.codigo}`}
                         value={c.precioPorPrenda || ''}
                         onChange={(e) => {
                           const p = Math.max(0, Number(e.target.value) || 0)
@@ -205,73 +333,59 @@ export function CortesPage() {
                             p,
                           )
                         }}
-                        className="h-6 w-16 rounded border border-stone-300 bg-white px-1 text-right text-xs font-medium text-stone-900 focus:border-amber-600 focus:outline-none"
+                        className="h-6 w-full min-w-0 rounded border border-stone-300 bg-white px-1 text-right text-xs font-medium text-stone-900 focus:border-amber-600 focus:outline-none"
                       />
                     </div>
                   </div>
                   <div className="text-right">
-                    <span className="text-stone-500 block text-[10px]">Total taller</span>
-                    <span className="text-sm font-bold text-amber-900 block mt-0.5">
+                    <div className="text-[10px] text-stone-500">Total taller</div>
+                    <div className="font-semibold text-amber-900">
                       <Money value={totalTaller} />
-                    </span>
+                    </div>
                   </div>
                 </div>
 
-                {/* Estado de pago calculado (independiente del estado del corte) */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between rounded-lg bg-stone-50 px-2.5 py-2 text-xs">
-                    <span
-                      className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-                        ESTADO_PAGO_STYLES[resumenPago.estado]
-                      }`}
-                    >
-                      {ESTADO_PAGO_LABEL[resumenPago.estado]}
-                    </span>
-                    <span className="text-stone-500">
-                      Pagado <Money value={resumenPago.pagado} /> /{' '}
-                      <Money value={resumenPago.total} />
-                    </span>
+                {/* Pago y saldo */}
+                <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-stone-100 px-3.5 py-2.5">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span
+                        className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                          ESTADO_PAGO_STYLES[resumenPago.estado]
+                        }`}
+                      >
+                        {ESTADO_PAGO_LABEL[resumenPago.estado]}
+                      </span>
+                      {resumenPago.saldo > 0 ? (
+                        <span className="text-[11px] font-semibold text-amber-800">
+                          Debe <Money value={resumenPago.saldo} />
+                        </span>
+                      ) : resumenPago.saldo < 0 ? (
+                        <span className="text-[11px] font-semibold text-emerald-700">
+                          A favor <Money value={-resumenPago.saldo} />
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-stone-400">Sin saldo</span>
+                      )}
+                    </div>
+                    <div className="mt-0.5 text-[10px] text-stone-500">
+                      Pagado <Money value={resumenPago.pagado} />
+                    </div>
                   </div>
 
-                  {resumenPago.saldo > 0 && (
-                    <p className="text-[11px] font-medium text-amber-800">
-                      Saldo pendiente: <Money value={resumenPago.saldo} />
-                    </p>
-                  )}
-                  {resumenPago.saldo < 0 && (
-                    <p className="text-[11px] font-medium text-emerald-700">
-                      Saldo a favor: <Money value={-resumenPago.saldo} />
-                    </p>
-                  )}
-
                   {sinTaller ? (
-                    <div className="flex h-9 w-full items-center justify-center rounded-lg border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-800">
-                      Asigná un taller para registrar pagos
-                    </div>
+                    <span className="shrink-0 text-[10px] font-medium text-amber-700">
+                      Asigná taller
+                    </span>
                   ) : (
                     <button
                       type="button"
                       onClick={() => navigate(`/pagos?corte=${encodeURIComponent(c.id)}`)}
-                      className="flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 active:bg-emerald-800 transition-colors"
+                      className="shrink-0 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-800 transition-colors hover:bg-emerald-100 active:bg-emerald-200"
                     >
-                      <span>{resumenPago.saldo > 0 ? 'Registrar pago' : 'Agregar pago'}</span>
-                      <span className="opacity-80">·</span>
-                      <span>
-                        {resumenPago.saldo > 0 ? (
-                          <>Saldo <Money value={resumenPago.saldo} /></>
-                        ) : resumenPago.saldo < 0 ? (
-                          <>A favor <Money value={-resumenPago.saldo} /></>
-                        ) : (
-                          'Sin saldo'
-                        )}
-                      </span>
+                      {resumenPago.saldo > 0 ? 'Pagar' : 'Ver pagos'}
                     </button>
                   )}
-                </div>
-
-                {/* Seguimiento */}
-                <div className="text-[11px] text-stone-400 pt-0.5">
-                  Seguimiento: Env. {c.seguimiento?.enviadas ?? c.cantidadPrendas} / Ent. {c.seguimiento?.entregadas ?? 0}
                 </div>
               </div>
             )
@@ -280,7 +394,7 @@ export function CortesPage() {
       </div>
 
       {/* Vista Escritorio: Tabla completa */}
-      <div className="hidden md:block overflow-x-auto rounded-lg border border-stone-200 bg-white shadow-sm">
+      <div className="hidden overflow-x-auto rounded-xl border border-stone-200 bg-white shadow-sm md:block">
         <table className="w-full divide-y divide-stone-200">
           <thead className="bg-stone-50">
             <tr>
@@ -300,25 +414,39 @@ export function CortesPage() {
             {cortesFiltrados.length === 0 ? (
               <tr>
                 <td colSpan={10} className="px-4 py-12 text-center text-sm text-stone-400">
-                  No hay cortes registrados en este estado.
+                  {busqueda
+                    ? 'No se encontraron cortes con esa búsqueda.'
+                    : 'No hay cortes registrados en este estado.'}
                 </td>
               </tr>
             ) : (
               cortesFiltrados.map((c) => {
-                const totalTaller =
-                  (Number(c.cantidadPrendas) || 0) * (Number(c.precioPorPrenda) || 0)
+                const cantidad = Number(c.cantidadPrendas) || 0
+                const totalTaller = cantidad * (Number(c.precioPorPrenda) || 0)
                 const sinTaller = !c.tallerId || c.tallerId === 'sin-taller'
                 const resumenPago = resumenPagoCorte(c, pagos)
+                const atrasado = corteAtrasado(c, hoy)
 
                 return (
-                  <tr key={c.id} className="hover:bg-stone-50/80 transition-colors">
+                  <tr key={c.id} className="transition-colors hover:bg-stone-50/80">
                     <td className={`${td} font-medium`}>{c.codigo}</td>
-                    <td className={`${td} text-stone-500`}>{formatDate(c.fecha)}</td>
+                    <td className={`${td} text-stone-500`}>
+                      <div>{formatDate(c.fecha)}</div>
+                      {atrasado && (
+                        <span
+                          title={`Entrega prometida: ${formatDate(c.fechaEntregaPrometida)}`}
+                          className="mt-0.5 inline-flex rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700"
+                        >
+                          Atrasado
+                        </span>
+                      )}
+                    </td>
                     <td className={`${td} font-medium text-stone-900`}>{c.modeloNombre}</td>
 
                     {/* Selector de Taller asignado */}
                     <td className="px-4 py-2">
                       <select
+                        aria-label={`Taller del corte ${c.codigo}`}
                         value={c.tallerId || ''}
                         onChange={(e) => {
                           const tId = e.target.value
@@ -329,9 +457,9 @@ export function CortesPage() {
                             tObj ? tObj.nombre : 'Sin asignar',
                           )
                         }}
-                        className={`h-8 w-full max-w-[180px] rounded border px-2 text-xs font-medium focus:border-amber-600 focus:outline-none transition-colors ${
+                        className={`h-8 w-full max-w-[180px] rounded border px-2 text-xs font-medium transition-colors focus:border-amber-600 focus:outline-none ${
                           sinTaller
-                            ? 'border-amber-300 bg-amber-50 text-amber-900 font-semibold'
+                            ? 'border-amber-300 bg-amber-50 font-semibold text-amber-900'
                             : 'border-stone-300 bg-white text-stone-900'
                         }`}
                       >
@@ -344,7 +472,7 @@ export function CortesPage() {
                       </select>
                     </td>
 
-                    <td className={tdRight}>{c.cantidadPrendas}</td>
+                    <td className={tdRight}>{cantidad}</td>
 
                     {/* Precio por prenda editable */}
                     <td className="px-3 py-2 text-right">
@@ -353,6 +481,7 @@ export function CortesPage() {
                         <input
                           type="number"
                           min="0"
+                          aria-label={`Precio por prenda del corte ${c.codigo}`}
                           value={c.precioPorPrenda || ''}
                           onChange={(e) => {
                             const p = Math.max(0, Number(e.target.value) || 0)
@@ -375,18 +504,20 @@ export function CortesPage() {
                     {/* Estado interactivo */}
                     <td className="px-4 py-2">
                       <select
+                        aria-label={`Estado del corte ${c.codigo}`}
                         value={c.estado}
                         onChange={(e) =>
                           changeEstadoCorte(c.id, e.target.value as EstadoCorte)
                         }
-                        className={`cursor-pointer rounded-full border px-2.5 py-1 text-xs font-semibold focus:outline-none transition-colors ${
+                        className={`cursor-pointer rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors focus:outline-none ${
                           ESTADO_STYLES[c.estado] || 'bg-stone-100 text-stone-800'
                         }`}
                       >
-                        <option value="PREPARADO">Preparado</option>
-                        <option value="EN_TALLER">En taller</option>
-                        <option value="ENTREGADO">Entregado</option>
-                        <option value="PAGADO">Pagado</option>
+                        {ESTADOS_CORTE.map((e) => (
+                          <option key={e.value} value={e.value}>
+                            {e.label}
+                          </option>
+                        ))}
                       </select>
                     </td>
 
@@ -400,8 +531,7 @@ export function CortesPage() {
                         {ESTADO_PAGO_LABEL[resumenPago.estado]}
                       </span>
                       <div className="mt-1 text-[11px] text-stone-500">
-                        Pagado <Money value={resumenPago.pagado} /> /{' '}
-                        <Money value={resumenPago.total} />
+                        Pagado <Money value={resumenPago.pagado} />
                       </div>
                       <div className="mt-0.5 text-[11px]">
                         {resumenPago.saldo > 0 ? (
@@ -417,9 +547,7 @@ export function CortesPage() {
                         )}
                       </div>
                       {sinTaller ? (
-                        <div className="mt-1 text-[11px] text-amber-700">
-                          Asigná taller
-                        </div>
+                        <div className="mt-1 text-[11px] text-amber-700">Asigná taller</div>
                       ) : (
                         <button
                           type="button"
@@ -428,13 +556,13 @@ export function CortesPage() {
                           }
                           className="mt-1 text-[11px] font-semibold text-emerald-700 hover:underline"
                         >
-                          Registrar pago
+                          {resumenPago.saldo > 0 ? 'Registrar pago' : 'Ver pagos'}
                         </button>
                       )}
                     </td>
 
                     <td className="px-4 py-2 text-xs text-stone-500">
-                      Env: {c.seguimiento?.enviadas ?? c.cantidadPrendas} / Ent:{' '}
+                      Env: {c.seguimiento?.enviadas ?? cantidad} / Ent:{' '}
                       {c.seguimiento?.entregadas ?? 0}
                     </td>
                   </tr>

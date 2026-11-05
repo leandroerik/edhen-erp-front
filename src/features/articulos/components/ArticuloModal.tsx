@@ -5,7 +5,7 @@ import { comprasDesdeStock } from '../stockRollos'
 import type { OpcionRollo } from '../stockRollos'
 import { usosStockDesdeDatos } from '../../../data/mock'
 import { useErpStore } from '../../../data/erpStore'
-import { formatARS } from '../../../utils/format'
+import { formatARS, hoyISO } from '../../../utils/format'
 import { ordenarPorFechaYCodigoDesc } from '../../../utils/orden'
 import { formatRollos, redondearRollos } from '../../../utils/stock'
 import type { Articulo, AvioArticulo, UnidadTela } from '../../../types'
@@ -370,7 +370,7 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
       id: customKey,
       stockKey: customKey,
       compraCodigo: 'CUSTOM',
-      compraFecha: new Date().toISOString().slice(0, 10),
+      compraFecha: hoyISO(),
       proveedorNombre: customProveedor.trim() || 'Rollo custom (sin stock)',
       telaNombre: customTela.trim(),
       colorNombre: customColor.trim(),
