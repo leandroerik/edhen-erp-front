@@ -8,15 +8,8 @@ import type { Taller } from '../../../types'
 import { TallerModal } from '../components/TallerModal'
 import { TallerDetalleModal } from '../components/TallerDetalleModal'
 
-function iniciales(nombre: string) {
-  const partes = nombre.trim().split(/\s+/).filter(Boolean)
-  const primera = partes[0]?.charAt(0) ?? ''
-  const segunda = partes[1]?.charAt(0) ?? ''
-  return `${primera}${segunda}`.toUpperCase() || '?'
-}
-
 export function TalleresPage() {
-  const { talleres, cortes, pagos, saveTaller, deleteTaller } = useErpStore()
+  const { talleres, cortes, pagos, articulos, saveTaller, deleteTaller } = useErpStore()
   const [busqueda, setBusqueda] = useState('')
   const [modalAbierto, setModalAbierto] = useState(false)
   const [editando, setEditando] = useState<Taller | null>(null)
@@ -119,27 +112,19 @@ export function TalleresPage() {
         </Button>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-t-2 border-stone-200 border-t-amber-600/70 bg-white p-3 shadow-sm sm:p-3.5">
-          <div className="text-[11px] font-medium text-stone-500 sm:text-xs">Talleres</div>
-          <div className="mt-1 text-lg font-semibold text-stone-900">{talleres.length}</div>
-          <div className="mt-0.5 text-[10px] text-stone-500 sm:text-xs">registrados</div>
-        </div>
-
-        <div className="rounded-xl border border-t-2 border-stone-200 border-t-sky-500/70 bg-white p-3 shadow-sm sm:p-3.5">
-          <div className="text-[11px] font-medium text-stone-500 sm:text-xs">Cortes activos</div>
-          <div className="mt-1 text-lg font-semibold text-stone-900">{totales.activos}</div>
-          <div className="mt-0.5 text-[10px] text-stone-500 sm:text-xs">preparado / en taller</div>
-        </div>
-
-        <div className="col-span-2 rounded-xl border border-t-2 border-stone-200 border-t-emerald-600/70 bg-white p-3 shadow-sm sm:col-span-1 sm:p-3.5">
-          <div className="text-[11px] font-medium text-stone-500 sm:text-xs">Saldo pendiente</div>
-          <div className="mt-1 whitespace-nowrap text-lg font-semibold text-stone-900">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-stone-200 bg-white px-3.5 py-2.5 text-xs text-stone-500 shadow-sm">
+        <span>
+          <strong className="font-semibold text-stone-900">{talleres.length}</strong> talleres
+        </span>
+        <span>
+          <strong className="font-semibold text-stone-900">{totales.activos}</strong> cortes activos
+        </span>
+        <span>
+          Saldo pendiente{' '}
+          <strong className={totales.saldo > 0 ? 'font-semibold text-amber-800' : 'font-semibold text-emerald-700'}>
             <Money value={totales.saldo} />
-          </div>
-          <div className="mt-0.5 text-[10px] text-stone-500 sm:text-xs">a pagar a talleres</div>
-        </div>
+          </strong>
+        </span>
       </div>
 
       {/* Buscador */}
@@ -172,7 +157,7 @@ export function TalleresPage() {
           )}
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-2.5 sm:grid-cols-2">
           {filtrados.map((t) => {
             const stats = statsPorTaller.get(t.id) ?? {
               cortes: 0,
@@ -185,42 +170,23 @@ export function TalleresPage() {
               <div
                 key={t.id}
                 onClick={() => abrirDetalle(t)}
-                className="cursor-pointer rounded-xl border border-stone-200 bg-white p-3.5 shadow-sm transition-colors hover:border-amber-300 hover:bg-amber-50/20 active:bg-stone-50"
+                className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-3.5 py-3 shadow-sm transition-colors hover:border-amber-300 hover:bg-amber-50/20 active:bg-stone-50"
               >
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-amber-200 bg-amber-50 text-xs font-semibold text-amber-800">
-                    {iniciales(t.nombre)}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h2 className="truncate text-sm font-semibold text-stone-900">{t.nombre}</h2>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                      {t.especialidad ? (
-                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800">
-                          {t.especialidad}
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-stone-400">Sin especialidad</span>
-                      )}
-                    </div>
-                  </div>
-                  <span className="shrink-0 text-xs font-medium text-amber-700">Ver →</span>
+                <div className="min-w-0">
+                  <h2 className="truncate text-sm font-semibold text-stone-900">{t.nombre}</h2>
+                  <p className="mt-0.5 truncate text-[11px] text-stone-500">
+                    {t.especialidad || 'Sin especialidad'} · {stats.activos} activos
+                  </p>
                 </div>
-
-                <div className="mt-2.5 flex items-center justify-between gap-2 rounded-lg bg-stone-50 px-2.5 py-1.5 text-xs">
-                  <span className="text-stone-500">
-                    Cortes activos:{' '}
-                    <strong className="font-semibold text-stone-900">{stats.activos}</strong>
-                  </span>
-                  <span className="text-stone-500">
-                    Saldo:{' '}
-                    <strong
-                      className={`font-semibold ${
-                        stats.saldo > 0 ? 'text-amber-800' : 'text-emerald-700'
-                      }`}
-                    >
-                      <Money value={stats.saldo} />
-                    </strong>
-                  </span>
+                <div className="shrink-0 text-right">
+                  <div
+                    className={`text-sm font-semibold ${
+                      stats.saldo > 0 ? 'text-amber-800' : 'text-emerald-700'
+                    }`}
+                  >
+                    <Money value={stats.saldo} />
+                  </div>
+                  <div className="text-[10px] text-stone-400">saldo</div>
                 </div>
               </div>
             )
@@ -239,6 +205,11 @@ export function TalleresPage() {
               saldo: 0,
             }
           }
+          articulos={articulos.filter(
+            (a) =>
+              a.tallerId === viendo.id ||
+              (!a.tallerId && a.tallerNombre === viendo.nombre),
+          )}
           onClose={() => setViendo(null)}
           onEdit={() => abrirEditar(viendo)}
           onDelete={() => handleDelete(viendo)}

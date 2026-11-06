@@ -22,9 +22,7 @@ export function ArticulosPage() {
   const [busqueda, setBusqueda] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
-  const [mostrarKpis, setMostrarKpis] = useState(() =>
-    typeof window !== 'undefined' ? window.matchMedia('(min-width: 640px)').matches : true,
-  )
+  const [mostrarKpis, setMostrarKpis] = useState(false)
 
   const nextCodigo = siguienteCodigo(
     'ART',

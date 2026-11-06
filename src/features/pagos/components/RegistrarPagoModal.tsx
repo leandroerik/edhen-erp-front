@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
-import { toISODate, uid } from '../../../utils/format'
+import { formatDate, toISODate, uid } from '../../../utils/format'
 import type { Corte, PagoTaller, TipoPagoTaller } from '../../../types'
-import { pagosDeCorte, resumenPagoCorte, tipoPagoSugerido } from '../pagos.utils'
+import { TIPO_PAGO_LABEL, resumenPagoCorte } from '../pagos.utils'
 
 interface Props {
   cortes: Corte[]
@@ -28,10 +28,6 @@ export function RegistrarPagoModal({
   const [corteId, setCorteId] = useState(corteInicial)
   const [fecha, setFecha] = useState(() => toISODate(new Date()))
   const [monto, setMonto] = useState(0)
-  const [tipo, setTipo] = useState<TipoPagoTaller>(() => {
-    const corte = cortes.find((item) => item.id === corteInicial)
-    return corte ? tipoPagoSugerido(pagosDeCorte(pagos, corte.id)) : 'ADELANTO'
-  })
   const [concepto, setConcepto] = useState('')
 
   const corte = cortes.find((item) => item.id === corteId)
@@ -44,24 +40,24 @@ export function RegistrarPagoModal({
   const handleCorteChange = (id: string) => {
     setCorteId(id)
     setMonto(0)
-    const nuevoCorte = cortes.find((item) => item.id === id)
-    setTipo(nuevoCorte ? tipoPagoSugerido(pagosDeCorte(pagos, nuevoCorte.id)) : 'ADELANTO')
   }
 
   const aplicarPorcentaje = (porcentaje: number) => {
     if (saldo <= 0) return
     setMonto(Math.round(saldo * porcentaje) / 100)
-    if (porcentaje >= 100) {
-      setTipo('FINAL')
-    } else {
-      setTipo(resumen && resumen.pagos.length === 0 ? 'ADELANTO' : 'PARCIAL')
-    }
   }
 
   const handleSave = () => {
     if (!corte) return
     const montoFinal = Math.round((Number(monto) || 0) * 100) / 100
     if (montoFinal <= 0 || !fecha) return
+
+    const tipo: TipoPagoTaller =
+      (resumen?.pagos.length ?? 0) === 0
+        ? 'ADELANTO'
+        : montoFinal >= saldo - 0.005
+          ? 'FINAL'
+          : 'PARCIAL'
 
     onSave({
       id: uid('pago'),
@@ -84,7 +80,7 @@ export function RegistrarPagoModal({
           <div>
             <h2 className="text-base font-semibold text-stone-900">Registrar pago a taller</h2>
             <p className="text-xs text-stone-500">
-              El pago se imputa al corte seleccionado y descuenta su saldo.
+              Se imputa al corte seleccionado. Abajo ves su historial.
             </p>
           </div>
           <button
@@ -201,28 +197,57 @@ export function RegistrarPagoModal({
                 </Button>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelCls}>Tipo de pago</label>
-                  <select
-                    className={inputCls}
-                    value={tipo}
-                    onChange={(e) => setTipo(e.target.value as TipoPagoTaller)}
-                  >
-                    <option value="ADELANTO">Adelanto</option>
-                    <option value="PARCIAL">Parcial</option>
-                    <option value="FINAL">Final</option>
-                  </select>
+              <div>
+                <label className={labelCls}>Concepto / nota</label>
+                <input
+                  className={inputCls}
+                  value={concepto}
+                  onChange={(e) => setConcepto(e.target.value)}
+                  placeholder="Opcional. Ej. adelanto para telas"
+                />
+              </div>
+
+              <div className="rounded-lg border border-stone-200 bg-white">
+                <div className="flex items-center justify-between border-b border-stone-100 px-3 py-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                    Historial del corte
+                  </span>
+                  <span className="text-[11px] text-stone-400">
+                    {resumen?.pagos.length ?? 0} pago(s)
+                  </span>
                 </div>
-                <div>
-                  <label className={labelCls}>Concepto / nota</label>
-                  <input
-                    className={inputCls}
-                    value={concepto}
-                    onChange={(e) => setConcepto(e.target.value)}
-                    placeholder="Ej. adelanto para telas"
-                  />
-                </div>
+                {resumen && resumen.pagos.length > 0 ? (
+                  <div className="divide-y divide-stone-100">
+                    {resumen.pagos.map((pago) => (
+                      <div
+                        key={pago.id}
+                        className="flex items-center justify-between gap-3 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 text-xs font-medium text-stone-800">
+                            <span>{TIPO_PAGO_LABEL[pago.tipo]}</span>
+                            <span className="text-stone-300">·</span>
+                            <span className="font-normal text-stone-500">
+                              {formatDate(pago.fecha)}
+                            </span>
+                          </div>
+                          {pago.concepto && (
+                            <div className="mt-0.5 truncate text-[11px] text-stone-400">
+                              {pago.concepto}
+                            </div>
+                          )}
+                        </div>
+                        <span className="shrink-0 text-sm font-semibold text-stone-900">
+                          <Money value={pago.monto} />
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="px-3 py-3 text-sm text-stone-400">
+                    Todavía no hay pagos registrados para este corte.
+                  </p>
+                )}
               </div>
 
               {exceso > 0 ? (

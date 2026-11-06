@@ -16,11 +16,7 @@ const tdRight = `${td} text-right tabular-nums`
 function totales(encimada: Encimada) {
   const capas = encimada.cargas.reduce((a, c) => a + c.capas, 0)
   const prendas = capas * encimada.items.reduce((a, i) => a + i.cantidad, 0)
-  return {
-    capas,
-    prendas,
-    modelos: encimada.items.length,
-  }
+  return { capas, prendas }
 }
 
 export function CargaCapasPage() {
@@ -88,13 +84,7 @@ export function CargaCapasPage() {
         ) : (
           encimadasOrdenadas.map((encimada) => {
             const t = totales(encimada)
-            const modelosTexto = encimada.items
-              .filter((i) => i.modeloNombre.trim())
-              .map(
-                (i) =>
-                  `${i.modeloNombre}: ${t.capas * (Number(i.cantidad) || 0)} prendas`,
-              )
-              .join(' · ')
+            const items = encimada.items.filter((i) => i.modeloNombre.trim())
 
             return (
               <div
@@ -130,18 +120,32 @@ export function CargaCapasPage() {
                   </div>
                 </div>
 
-                <div className="mt-2 text-xs text-stone-600">
-                  <span className="font-medium text-stone-700">Modelos:</span> {modelosTexto || '-'}
+                <div className="mt-2 space-y-1 text-xs text-stone-600">
+                  {items.length === 0 ? (
+                    <div className="text-stone-400">Sin modelos cargados.</div>
+                  ) : (
+                    items.map((item) => (
+                      <div key={item.id} className="flex items-baseline justify-between gap-3">
+                        <span className="font-medium text-stone-700">{item.modeloNombre}</span>
+                        <span className="shrink-0 tabular-nums text-stone-500">
+                          {t.capas} capas × {item.cantidad} ={' '}
+                          <strong className="text-stone-800">
+                            {t.capas * (Number(item.cantidad) || 0)}
+                          </strong>{' '}
+                          prendas
+                        </span>
+                      </div>
+                    ))
+                  )}
                 </div>
 
                 <div className="mt-3 flex items-center justify-between rounded bg-stone-50 px-2.5 py-1.5 text-xs">
                   <span className="text-stone-500">
-                    Capas: <strong className="text-stone-800">{t.capas}</strong>
+                    Capas totales: <strong className="text-stone-800">{t.capas}</strong>
                   </span>
                   <span className="text-stone-500">
                     Total prendas: <strong className="text-stone-900">{t.prendas}</strong>
                   </span>
-                  <span className="font-medium text-amber-700">Ver detalles →</span>
                 </div>
               </div>
             )
@@ -154,11 +158,10 @@ export function CargaCapasPage() {
         <table className="w-full divide-y divide-stone-200">
           <thead className="bg-stone-50">
             <tr>
-              <th className={`${th} text-left`}>Código</th>
-              <th className={`${th} text-left`}>Fecha</th>
+              <th className={`${th} text-left`}>Encimada</th>
               <th className={`${th} text-left`}>Estado</th>
               <th className={thRight}>Capas</th>
-              <th className={`${th} text-left`}>Modelos</th>
+              <th className={`${th} text-left`}>Modelos / capas por modelo</th>
               <th className={thRight}>Total prendas</th>
               <th className={`${th} text-right`}>Acciones</th>
             </tr>
@@ -166,21 +169,24 @@ export function CargaCapasPage() {
           <tbody className="divide-y divide-stone-100">
             {encimadasOrdenadas.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-sm text-stone-400">
+                <td colSpan={6} className="px-4 py-8 text-center text-sm text-stone-400">
                   No hay encimadas cargadas.
                 </td>
               </tr>
             ) : (
               encimadasOrdenadas.map((encimada) => {
                 const t = totales(encimada)
+                const items = encimada.items.filter((i) => i.modeloNombre.trim())
                 return (
                   <tr
                     key={encimada.id}
                     onClick={() => setViewing(encimada)}
                     className="cursor-pointer hover:bg-stone-50"
                   >
-                    <td className={`${td} font-medium`}>{encimada.codigo}</td>
-                    <td className={`${td} text-stone-600`}>{formatDate(encimada.fecha)}</td>
+                    <td className="px-4 py-2.5">
+                      <div className="text-sm font-medium text-stone-900">{encimada.codigo}</div>
+                      <div className="text-xs text-stone-500">{formatDate(encimada.fecha)}</div>
+                    </td>
                     <td className="px-4 py-2.5">
                       <span
                         className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -192,15 +198,31 @@ export function CargaCapasPage() {
                         {encimada.estado === 'EN_CORTE' ? 'En corte' : 'Cerrada'}
                       </span>
                     </td>
-                    <td className={tdRight}>{t.capas}</td>
-                    <td className={`${td} text-stone-600`}>
-                      {encimada.items
-                        .filter((i) => i.modeloNombre.trim())
-                        .map(
-                          (i) =>
-                            `${i.modeloNombre}: ${t.capas * (Number(i.cantidad) || 0)} prendas`,
-                        )
-                        .join(' · ') || '-'}
+                    <td className={`${tdRight} font-semibold`}>{t.capas}</td>
+                    <td className="px-4 py-2.5">
+                      {items.length === 0 ? (
+                        <span className="text-xs text-stone-400">Sin modelos</span>
+                      ) : (
+                        <div className="space-y-1">
+                          {items.map((item) => (
+                            <div
+                              key={item.id}
+                              className="flex items-baseline justify-between gap-4 text-xs"
+                            >
+                              <span className="min-w-0 truncate font-medium text-stone-800">
+                                {item.modeloNombre}
+                              </span>
+                              <span className="shrink-0 tabular-nums text-stone-500">
+                                {t.capas} capas × {item.cantidad} ={' '}
+                                <strong className="text-stone-900">
+                                  {t.capas * (Number(item.cantidad) || 0)}
+                                </strong>{' '}
+                                prendas
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </td>
                     <td className={`${tdRight} font-semibold text-stone-900`}>{t.prendas}</td>
                     <td className="px-4 py-2.5 text-right">
@@ -208,13 +230,6 @@ export function CargaCapasPage() {
                         className="flex items-center justify-end gap-1.5"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <button
-                          type="button"
-                          onClick={() => setViewing(encimada)}
-                          className="rounded px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50"
-                        >
-                          Ver
-                        </button>
                         <button
                           type="button"
                           onClick={() => setEditing(encimada)}

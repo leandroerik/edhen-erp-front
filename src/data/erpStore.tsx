@@ -24,7 +24,12 @@ import type {
   TelaArticulo,
 } from '../types'
 import { fetchGasBootstrap, postGasAction, postGasBatch } from '../api/gasClient'
-import { anchoCodigo, renumerarConsecutivos, siguienteId } from '../utils/codigos'
+import {
+  anchoCodigo,
+  renumerarConsecutivos,
+  siguienteId,
+  siguienteIdCorte,
+} from '../utils/codigos'
 import { redondearRollos } from '../utils/stock'
 import { fechaISO, toISODate } from '../utils/format'
 
@@ -192,6 +197,124 @@ function totalCapas(encimada: Encimada) {
   return encimada.cargas.reduce((a, c) => a + c.capas, 0)
 }
 
+/**
+ * Repara artículos viejos o regenerados sin taller usando el corte asociado.
+ * Evita que una asignación existente desaparezca de la lista de artículos.
+ */
+function reconciliarTalleresArticulos(
+  articulos: Articulo[],
+  cortes: Corte[],
+): Articulo[] {
+  const porCorteId = new Map(cortes.map((corte) => [corte.id, corte]))
+  const porModeloId = new Map(cortes.map((corte) => [corte.modeloId, corte]))
+  let huboCambios = false
+
+  const resultado = articulos.map((articulo) => {
+    if (articulo.tallerId) return articulo
+    const corte =
+      (articulo.corteId ? porCorteId.get(articulo.corteId) : undefined) ??
+      porModeloId.get(articulo.id)
+    if (!corte?.tallerId || corte.tallerId === 'sin-taller') return articulo
+    huboCambios = true
+    return {
+      ...articulo,
+      tallerId: corte.tallerId,
+      tallerNombre: corte.tallerNombre,
+    }
+  })
+
+  return huboCambios ? resultado : articulos
+}
+
+/**
+ * Todo artículo con taller asignado debe tener su corte visible en la sección
+ * Cortes. Si falta, lo crea; si el corte existe por modelo, repara el vínculo.
+ */
+function asegurarCortesArticulos(articulos: Articulo[], cortes: Corte[]) {
+  const porCorteId = new Map(cortes.map((corte) => [corte.id, corte]))
+  const porModeloId = new Map(cortes.map((corte) => [corte.modeloId, corte]))
+  const nuevos: Corte[] = []
+  const articulosCambiados: Articulo[] = []
+
+  let seq = nextCorteSeq(cortes)
+  const ancho = anchoCodigo('C', cortes.map((corte) => corte.codigo))
+  const fecha = toISODate(new Date())
+  const entrega = new Date()
+  entrega.setDate(entrega.getDate() + 7)
+  const fechaEntrega = toISODate(entrega)
+
+  const actualizados = articulos.map((articulo) => {
+    if (!articulo.tallerId || articulo.tallerId === 'sin-taller') return articulo
+
+    if (articulo.corteId && porCorteId.has(articulo.corteId)) return articulo
+
+    const cortePorModelo = porModeloId.get(articulo.id)
+    if (cortePorModelo) {
+      if (articulo.corteId === cortePorModelo.id) return articulo
+      const actualizado = { ...articulo, corteId: cortePorModelo.id }
+      articulosCambiados.push(actualizado)
+      return actualizado
+    }
+
+    const corteId = siguienteIdCorte([...cortes, ...nuevos])
+    const codigo = `C-${String(seq).padStart(ancho, '0')}`
+    seq += 1
+
+    const corte: Corte = {
+      id: corteId,
+      codigo,
+      fecha,
+      fechaEntregaPrometida: fechaEntrega,
+      modeloId: articulo.id,
+      modeloNombre: articulo.nombre || articulo.descripcion || 'Artículo',
+      tallerId: articulo.tallerId,
+      tallerNombre: articulo.tallerNombre || 'Sin asignar',
+      cantidadPrendas: articulo.cantidadPrendas,
+      precioPorPrenda: articulo.manoObra,
+      telasUsadas: (articulo.telas || []).map((tela, idx) => ({
+        id: `tuc-${corteId}-${idx}`,
+        telaId: tela.stockKey || `tel-${idx}`,
+        telaNombre: tela.telaNombre,
+        colorId: tela.colorNombre,
+        colorNombre: tela.colorNombre,
+        loteId: tela.loteId,
+        rollosUsados: tela.rollosUsados,
+        cantidadUsada: tela.cantidadUsar,
+        unidad: tela.unidad,
+      })),
+      seguimiento: {
+        enviadas: articulo.cantidadPrendas,
+        entregadas: 0,
+        falladas: 0,
+      },
+      estado: 'PREPARADO',
+      costoTela: articulo.costoTelaTotalUsado,
+      costoManoObra: articulo.manoObra * articulo.cantidadPrendas,
+      costoTotal: articulo.costoTotalProduccion,
+      costoPorPrenda: articulo.costoUnitario,
+    }
+
+    nuevos.push(corte)
+    porCorteId.set(corteId, corte)
+    porModeloId.set(articulo.id, corte)
+
+    const actualizado = { ...articulo, corteId }
+    articulosCambiados.push(actualizado)
+    return actualizado
+  })
+
+  if (nuevos.length === 0 && articulosCambiados.length === 0) {
+    return { articulos, cortes, nuevos, articulosCambiados }
+  }
+
+  return {
+    articulos: actualizados,
+    cortes: [...nuevos, ...cortes],
+    nuevos,
+    articulosCambiados,
+  }
+}
+
 function manoObraModelo(modelo?: Modelo) {
   if (!modelo) return 0
   for (const taller of mockTalleres) {
@@ -300,14 +423,20 @@ function articuloDesdeItem(
     margenReal,
     encimadaId: encimada.id,
     encimadaItemId: item.id,
+    tallerId: existente?.tallerId,
+    tallerNombre: existente?.tallerNombre,
+    corteId: existente?.corteId,
   }
 }
 
 export function ErpStoreProvider({ children }: { children: ReactNode }) {
   const initial = loadInitialData()
-  const [articulos, setArticulos] = useState<Articulo[]>(initial.articulos || mockArticulos)
+  const cortesIniciales = initial.cortes || mockCortes
+  const [articulos, setArticulos] = useState<Articulo[]>(
+    reconciliarTalleresArticulos(initial.articulos || mockArticulos, cortesIniciales),
+  )
   const [encimadas, setEncimadas] = useState<Encimada[]>(initial.encimadas || mockEncimadas)
-  const [cortes, setCortes] = useState<Corte[]>(initial.cortes || mockCortes)
+  const [cortes, setCortes] = useState<Corte[]>(cortesIniciales)
   const [pagos, setPagos] = useState<PagoTaller[]>(initial.pagos || mockPagos)
   const [compras, setCompras] = useState<Compra[]>(initial.compras || mockCompras)
   const [talleres, setTalleres] = useState<Taller[]>(initial.talleres || mockTalleres)
@@ -329,6 +458,33 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
       proveedores,
     })
   }, [articulos, encimadas, cortes, pagos, compras, talleres, proveedores])
+
+  // Si un artículo tiene taller pero no tiene corte asociado, lo creamos.
+  // Así toda asignación de taller aparece también en la sección Cortes.
+  useEffect(() => {
+    const resultado = asegurarCortesArticulos(articulos, cortes)
+    if (resultado.nuevos.length === 0 && resultado.articulosCambiados.length === 0) {
+      return
+    }
+
+    setArticulos(resultado.articulos)
+    if (resultado.nuevos.length > 0) setCortes(resultado.cortes)
+
+    if (resultado.nuevos.length > 0) {
+      postGasBatch('corte', resultado.nuevos).then((ok) => {
+        if (!ok) resultado.nuevos.forEach((corte) => postGasAction('guardarCorte', corte))
+      })
+    }
+    if (resultado.articulosCambiados.length > 0) {
+      postGasBatch('articulo', resultado.articulosCambiados).then((ok) => {
+        if (!ok) {
+          resultado.articulosCambiados.forEach((articulo) =>
+            postGasAction('guardarArticulo', articulo),
+          )
+        }
+      })
+    }
+  }, [articulos, cortes])
 
   // Persiste los códigos que cambió la normalización/renumeración.
   // Intenta un solo request por entidad; si el backend todavía no tiene
@@ -381,13 +537,18 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
       const artsBase = datos.articulos ?? articulos
       const encsBase = datos.encimadas ?? encimadas
       const normalizado = normalizarCodigos(artsBase, encsBase)
+      const artsReconciliados = reconciliarTalleresArticulos(
+        normalizado.articulos,
+        datos.cortes ?? cortes,
+      )
 
       if (datos.articulos) {
-        setArticulos(normalizado.articulos)
-        counts.articulos = normalizado.articulos.length
+        setArticulos(artsReconciliados)
+        counts.articulos = artsReconciliados.length
       }
       if (datos.cortes) {
         setCortes(datos.cortes)
+        if (!datos.articulos) setArticulos(artsReconciliados)
         counts.cortes = datos.cortes.length
       }
       if (datos.encimadas) {
@@ -415,7 +576,7 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
       persistirCodigos(normalizado)
 
       saveStoreData({
-        articulos: normalizado.articulos,
+        articulos: artsReconciliados,
         cortes: datos.cortes || cortes,
         encimadas: normalizado.encimadas,
         pagos: datos.pagos || pagos,
@@ -456,10 +617,15 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
         proveedores: Array.isArray(data.proveedores) ? data.proveedores : undefined,
       })
       if (datos.articulos && datos.articulos.length > 0) {
-        setArticulos(datos.articulos)
+        setArticulos(
+          reconciliarTalleresArticulos(datos.articulos, datos.cortes ?? cortes),
+        )
       }
       if (datos.cortes && datos.cortes.length > 0) {
         setCortes(datos.cortes)
+        setArticulos((prev) =>
+          reconciliarTalleresArticulos(prev, datos.cortes as Corte[]),
+        )
       }
       if (datos.encimadas && datos.encimadas.length > 0) {
         setEncimadas(datos.encimadas)
@@ -536,7 +702,7 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
   }
 
   const addArticulo = (articulo: Articulo) => {
-    const corteId = `corte-${Date.now()}`
+    const corteId = siguienteIdCorte(cortes)
     const articuloConCorte = { ...articulo, corteId }
 
     setArticulos((prev) => [articuloConCorte, ...prev])
@@ -722,8 +888,15 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
     talleres?: Taller[]
     proveedores?: Proveedor[]
   }) => {
-    if (datos.articulos) setArticulos(datos.articulos)
-    if (datos.cortes) setCortes(datos.cortes)
+    if (datos.articulos) {
+      setArticulos(
+        reconciliarTalleresArticulos(datos.articulos, datos.cortes ?? cortes),
+      )
+    }
+    if (datos.cortes) {
+      setCortes(datos.cortes)
+      setArticulos((prev) => reconciliarTalleresArticulos(prev, datos.cortes as Corte[]))
+    }
     if (datos.encimadas) setEncimadas(datos.encimadas)
     if (datos.pagos) setPagos(datos.pagos)
     if (datos.compras) setCompras(datos.compras)

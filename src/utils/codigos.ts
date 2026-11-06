@@ -104,11 +104,39 @@ export function renumerarConsecutivos<T>(
 /**
  * Proximo ID consecutivo basado en los IDs existentes (ej. enc-1, enc-2 -> enc-3).
  */
-export function siguienteId(prefijo: string, ids: Array<string | undefined>): string {
+export function siguienteId(
+  prefijo: string,
+  ids: Array<string | undefined>,
+  digits?: number,
+): string {
   const regex = new RegExp(`^${prefijo}-(\\d+)$`, 'i')
   const maximo = ids.reduce((acc, id) => {
     const match = regex.exec(String(id || '').trim())
     return match ? Math.max(acc, Number(match[1])) : acc
   }, 0)
-  return `${prefijo}-${maximo + 1}`
+  const numero = maximo + 1
+  return `${prefijo}-${digits ? String(numero).padStart(digits, '0') : numero}`
+}
+
+/**
+ * ID de corte ordenado (corte-001, corte-002...). Se calcula a partir del
+ * código C-XXXX para no quedar contaminado por IDs viejos con timestamp.
+ */
+export function siguienteIdCorte(
+  cortes: Array<{ id?: string; codigo?: string }>,
+): string {
+  const usados = new Set(cortes.map((corte) => String(corte.id || '').trim()))
+  const maximoCodigo = cortes.reduce((acc, corte) => {
+    const match = /^C-(\d+)$/i.exec(String(corte.codigo || '').trim())
+    return match ? Math.max(acc, Number(match[1])) : acc
+  }, 0)
+
+  let numero = maximoCodigo + 1
+  let id = ''
+  do {
+    id = `corte-${String(numero).padStart(3, '0')}`
+    numero += 1
+  } while (usados.has(id))
+
+  return id
 }

@@ -132,7 +132,7 @@ function aviosIniciales(articulo?: Articulo | null): AvioLine[] {
 }
 
 export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Props) {
-  const { compras, encimadas, articulos } = useErpStore()
+  const { compras, encimadas, articulos, talleres } = useErpStore()
   const usosStock = useMemo(
     () => usosStockDesdeDatos(encimadas, articulos),
     [encimadas, articulos],
@@ -159,6 +159,7 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
   const [telas, setTelas] = useState<TelaLine[]>(() => telasIniciales(articulo, opcionesStock))
   const [rollosEdit, setRollosEdit] = useState<Record<string, string>>({})
   const [selectedRolloKey, setSelectedRolloKey] = useState('')
+  const [tallerId, setTallerId] = useState(articulo?.tallerId || '')
   const [manoObra, setManoObra] = useState<number>(
     articulo ? Number(articulo.manoObra) || 0 : 0,
   )
@@ -492,6 +493,8 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
       costoUsado: t.costoUsado,
     }))
 
+    const tallerSeleccionado = talleres.find((t) => t.id === tallerId)
+
     const payload = {
       ...(articulo ? { id: articulo.id, corteId: articulo.corteId } : {}),
       encimadaId: encimadaId || undefined,
@@ -500,8 +503,8 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
       nombre: nombre.trim() || descripcion.trim() || 'Artículo',
       descripcion: descripcion.trim(),
       cantidadPrendas: cantPrendas,
-      tallerId: articulo?.tallerId || '',
-      tallerNombre: articulo?.tallerNombre || 'Sin asignar',
+      tallerId,
+      tallerNombre: tallerSeleccionado?.nombre || 'Sin asignar',
       telas: telasData,
       costoTelaTotalUsado: costoTelaTotal,
       costoTelaPorPrenda,
@@ -534,6 +537,7 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
   const puedeGuardar =
     cantPrendas > 0 &&
     (nombre.trim().length > 0 || descripcion.trim().length > 0) &&
+    (talleres.length === 0 || Boolean(tallerId)) &&
     telasValidas &&
     encimadaValida
 
@@ -1117,9 +1121,38 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
                 Confección / Taller
               </span>
               <p className="mt-0.5 text-xs text-stone-500">
-                Pago estimado al taller de costura por prenda terminada.
+                Asigná el taller y el pago estimado por prenda terminada.
               </p>
               <div className="mt-3">
+                <label className={labelCls}>Taller asignado</label>
+                <select
+                  className={`${inputCls} ${
+                    talleres.length > 0 && !tallerId ? 'border-amber-400 bg-amber-50' : ''
+                  }`}
+                  value={tallerId}
+                  onChange={(e) => setTallerId(e.target.value)}
+                >
+                  <option value="">
+                    {talleres.length === 0 ? 'No hay talleres cargados' : '-- Elegir taller --'}
+                  </option>
+                  {talleres.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.nombre}
+                      {t.especialidad ? ` · ${t.especialidad}` : ''}
+                    </option>
+                  ))}
+                </select>
+                {talleres.length === 0 ? (
+                  <p className="mt-1 text-[11px] text-amber-700">
+                    Cargá un taller en la sección Talleres para poder asignarlo.
+                  </p>
+                ) : !tallerId ? (
+                  <p className="mt-1 text-[11px] text-amber-700">
+                    El artículo y su corte quedarán sin taller asignado.
+                  </p>
+                ) : null}
+              </div>
+              <div className="mt-2">
                 <label className={labelCls}>Mano de obra por prenda ($)</label>
                 <div className="flex items-center gap-2">
                   <input

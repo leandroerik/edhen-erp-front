@@ -24,17 +24,6 @@ const tdRight = `${td} text-right tabular-nums`
 const selectCls =
   'h-9 rounded-md border border-stone-300 bg-white px-3 text-sm text-stone-900 focus:border-amber-600 focus:outline-none'
 
-function Kpi({ label, value, accent }: { label: string; value: number; accent: string }) {
-  return (
-    <div className={`rounded-lg border border-t-2 border-stone-200 bg-white p-4 ${accent}`}>
-      <div className="text-xs text-stone-500">{label}</div>
-      <div className="mt-1 text-lg font-semibold text-stone-900">
-        <Money value={value} />
-      </div>
-    </div>
-  )
-}
-
 function SaldoCell({ saldo }: { saldo: number }) {
   if (saldo > 0.005) {
     return (
@@ -64,6 +53,7 @@ export function PagosPage() {
   const [busqueda, setBusqueda] = useState('')
   const [filtroTaller, setFiltroTaller] = useState('')
   const [filtroEstado, setFiltroEstado] = useState<EstadoPagoCorte | 'TODOS'>('TODOS')
+  const [tab, setTab] = useState<'cortes' | 'pagos' | 'saldos'>('cortes')
   const [modalAbierto, setModalAbierto] = useState(() => Boolean(corteParam))
   const [corteSeleccionado, setCorteSeleccionado] = useState<string | undefined>(
     () => corteParam,
@@ -155,17 +145,69 @@ export function PagosPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-        <Kpi label="Total mano de obra" value={total} accent="border-t-amber-600/70" />
-        <Kpi label="Pagado" value={pagado} accent="border-t-emerald-600/70" />
-        <Kpi label="Saldo pendiente" value={saldoPendiente} accent="border-t-amber-600/70" />
-        <Kpi label="Saldo a favor" value={saldoAFavor} accent="border-t-violet-600/70" />
+      <div className="grid grid-cols-3 divide-x divide-stone-100 rounded-lg border border-stone-200 bg-white py-2.5 shadow-sm">
+        <div className="px-3 text-center">
+          <div className="text-[10px] font-medium uppercase tracking-wide text-stone-500">
+            Total
+          </div>
+          <div className="mt-0.5 text-sm font-semibold text-stone-900">
+            <Money value={total} />
+          </div>
+        </div>
+        <div className="px-3 text-center">
+          <div className="text-[10px] font-medium uppercase tracking-wide text-stone-500">
+            Pagado
+          </div>
+          <div className="mt-0.5 text-sm font-semibold text-emerald-700">
+            <Money value={pagado} />
+          </div>
+        </div>
+        <div className="px-3 text-center">
+          <div className="text-[10px] font-medium uppercase tracking-wide text-stone-500">
+            Saldo pendiente
+          </div>
+          <div className="mt-0.5 text-sm font-semibold text-amber-800">
+            <Money value={saldoPendiente} />
+          </div>
+          {saldoAFavor > 0 && (
+            <div className="text-[10px] text-violet-700">
+              A favor: <Money value={saldoAFavor} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-1 rounded-lg border border-stone-200 bg-white p-1">
+        {(
+          [
+            ['cortes', 'Cortes', resumenes.length],
+            ['pagos', 'Pagos', pagos.length],
+            ['saldos', 'Saldos', saldosPorTaller.length],
+          ] as const
+        ).map(([id, label, count]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setTab(id)}
+            aria-pressed={tab === id}
+            className={`rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+              tab === id
+                ? 'bg-stone-900 text-white'
+                : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900'
+            }`}
+          >
+            {label}
+            <span className={`ml-1 ${tab === id ? 'text-stone-300' : 'text-stone-400'}`}>
+              {count}
+            </span>
+          </button>
+        ))}
       </div>
 
       <div className="flex flex-col gap-2 rounded-lg border border-stone-200 bg-white p-3 sm:flex-row sm:items-center">
         <input
           className="h-9 flex-1 rounded-md border border-stone-300 bg-white px-3 text-sm focus:border-amber-600 focus:outline-none"
-          placeholder="Buscar por corte, modelo, taller o concepto..."
+          placeholder="Buscar corte, taller o concepto..."
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
         />
@@ -181,23 +223,25 @@ export function PagosPage() {
             </option>
           ))}
         </select>
-        <select
-          className={selectCls}
-          value={filtroEstado}
-          onChange={(e) => setFiltroEstado(e.target.value as EstadoPagoCorte | 'TODOS')}
-        >
-          <option value="TODOS">Todos los estados</option>
-          {(Object.keys(ESTADO_PAGO_LABEL) as EstadoPagoCorte[]).map((estado) => (
-            <option key={estado} value={estado}>
-              {ESTADO_PAGO_LABEL[estado]}
-            </option>
-          ))}
-        </select>
+        {tab === 'cortes' && (
+          <select
+            className={selectCls}
+            value={filtroEstado}
+            onChange={(e) => setFiltroEstado(e.target.value as EstadoPagoCorte | 'TODOS')}
+          >
+            <option value="TODOS">Todos los estados</option>
+            {(Object.keys(ESTADO_PAGO_LABEL) as EstadoPagoCorte[]).map((estado) => (
+              <option key={estado} value={estado}>
+                {ESTADO_PAGO_LABEL[estado]}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
+      {tab === 'cortes' && (
       <div>
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-stone-900">Cortes a pagar</h2>
+        <div className="flex items-center justify-end">
           <span className="text-xs text-stone-500">
             {resumenesFiltrados.length} de {resumenes.length} cortes
           </span>
@@ -269,12 +313,10 @@ export function PagosPage() {
               <tr>
                 <th className={`${th} text-left`}>Corte</th>
                 <th className={`${th} text-left`}>Taller</th>
-                <th className={thRight}>Prendas</th>
-                <th className={thRight}>$/prenda</th>
                 <th className={thRight}>Total</th>
                 <th className={thRight}>Pagado</th>
                 <th className={thRight}>Saldo</th>
-                <th className={`${th} text-left`}>Estado pago</th>
+                <th className={`${th} text-left`}>Estado</th>
                 <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-stone-500">
                   Acción
                 </th>
@@ -283,7 +325,7 @@ export function PagosPage() {
             <tbody className="divide-y divide-stone-100">
               {resumenesFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center text-sm text-stone-400">
+                  <td colSpan={7} className="px-4 py-12 text-center text-sm text-stone-400">
                     {resumenes.length === 0
                       ? 'No hay cortes con taller asignado. Asigná un taller desde la sección Cortes.'
                       : 'No hay cortes para los filtros seleccionados.'}
@@ -299,10 +341,6 @@ export function PagosPage() {
                         <div className="text-xs text-stone-400">{formatDate(corte.fecha)}</div>
                       </td>
                       <td className={`${td} text-stone-700`}>{corte.tallerNombre}</td>
-                      <td className={tdRight}>{corte.cantidadPrendas}</td>
-                      <td className={tdRight}>
-                        <Money value={corte.precioPorPrenda} />
-                      </td>
                       <td className={`${tdRight} font-semibold`}>
                         <Money value={totalCorte} />
                       </td>
@@ -334,10 +372,10 @@ export function PagosPage() {
           </table>
         </div>
       </div>
+      )}
 
+      {tab === 'pagos' && (
       <div>
-        <h2 className="text-sm font-semibold text-stone-900">Pagos registrados</h2>
-        
         {/* Vista Mobile: Tarjetas de Pagos registrados */}
         <div className="mt-2 space-y-2.5 md:hidden">
           {pagosFiltrados.length === 0 ? (
@@ -437,17 +475,12 @@ export function PagosPage() {
               )}
             </tbody>
           </table>
-          <div className="border-t border-stone-100 px-4 py-2.5 text-xs text-stone-400">
-            Base de pago: prendas del corte × precio por prenda. Los adelantos y pagos parciales
-            se descuentan del total; si el monto supera el saldo, el excedente queda como saldo a
-            favor del taller.
-          </div>
         </div>
       </div>
+      )}
 
+      {tab === 'saldos' && (
       <div>
-        <h2 className="text-sm font-semibold text-stone-900">Saldo por taller</h2>
-        
         {/* Vista Mobile: Tarjetas de Saldo por taller */}
         <div className="mt-2 space-y-2.5 md:hidden">
           {saldosPorTaller.length === 0 ? (
@@ -523,6 +556,7 @@ export function PagosPage() {
           </table>
         </div>
       </div>
+      )}
 
       {modalAbierto ? (
         <RegistrarPagoModal

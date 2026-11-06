@@ -1,7 +1,7 @@
 import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
 import { mockModelos } from '../../../data/mock'
-import type { Taller } from '../../../types'
+import type { Articulo, Taller } from '../../../types'
 
 interface Stats {
   cortes: number
@@ -13,6 +13,7 @@ interface Stats {
 interface Props {
   taller: Taller
   stats: Stats
+  articulos: Articulo[]
   onClose: () => void
   onEdit: () => void
   onDelete: () => void
@@ -29,7 +30,14 @@ function nombreModelo(id: string) {
   return mockModelos.find((m) => m.id === id)?.nombre ?? id
 }
 
-export function TallerDetalleModal({ taller, stats, onClose, onEdit, onDelete }: Props) {
+export function TallerDetalleModal({
+  taller,
+  stats,
+  articulos,
+  onClose,
+  onEdit,
+  onDelete,
+}: Props) {
   const precios = Object.entries(taller.precioPorPrendaPorModelo || {})
   const telefonoDigitos = taller.telefono.replace(/\D/g, '')
 
@@ -62,19 +70,49 @@ export function TallerDetalleModal({ taller, stats, onClose, onEdit, onDelete }:
 
         {/* Cuerpo */}
         <div className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
-          {/* Stats */}
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className="rounded-lg border border-stone-200 bg-white p-2.5 text-center shadow-sm">
-              <div className="text-[10px] font-medium uppercase tracking-wide text-stone-500">
-                Cortes
+          {/* Contacto rápido */}
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-stone-200 bg-stone-50 px-3.5 py-2.5">
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-stone-800">
+                {taller.telefono || 'Sin teléfono'}
               </div>
-              <div className="mt-0.5 text-base font-bold text-stone-900">{stats.cortes}</div>
+              {taller.direccion && (
+                <div className="truncate text-[11px] text-stone-500">{taller.direccion}</div>
+              )}
             </div>
+            {telefonoDigitos && (
+              <div className="flex shrink-0 gap-1.5">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => (window.location.href = `tel:${taller.telefono}`)}
+                >
+                  Llamar
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    window.open(
+                      `https://wa.me/${telefonoDigitos}`,
+                      '_blank',
+                      'noopener,noreferrer',
+                    )
+                  }
+                >
+                  WhatsApp
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-2">
             <div className="rounded-lg border border-stone-200 bg-white p-2.5 text-center shadow-sm">
               <div className="text-[10px] font-medium uppercase tracking-wide text-stone-500">
                 Activos
               </div>
               <div className="mt-0.5 text-base font-bold text-stone-900">{stats.activos}</div>
+              <div className="text-[10px] text-stone-400">de {stats.cortes}</div>
             </div>
             <div className="rounded-lg border border-stone-200 bg-white p-2.5 text-center shadow-sm">
               <div className="text-[10px] font-medium uppercase tracking-wide text-stone-500">
@@ -92,71 +130,38 @@ export function TallerDetalleModal({ taller, stats, onClose, onEdit, onDelete }:
             </div>
           </div>
 
-          {/* Contacto */}
+          {/* Artículos asignados */}
           <div className="rounded-lg border border-stone-200 bg-white p-3.5 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-              Contacto
-            </div>
-            <div className="mt-2 space-y-1.5 text-sm text-stone-700">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-stone-500">Teléfono</span>
-                {taller.telefono ? (
-                  <a href={`tel:${taller.telefono}`} className="font-medium hover:underline">
-                    {taller.telefono}
-                  </a>
-                ) : (
-                  <span className="text-stone-400">-</span>
-                )}
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                Artículos asignados
               </div>
-              {taller.direccion && (
-                <div className="flex items-center justify-between gap-3">
-                  <span className="shrink-0 text-stone-500">Dirección</span>
-                  <span className="truncate text-right">{taller.direccion}</span>
-                </div>
-              )}
+              <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-semibold text-stone-600">
+                {articulos.length}
+              </span>
             </div>
-            {telefonoDigitos && (
-              <div className="mt-3 flex gap-2">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="flex-1"
-                  onClick={() => (window.location.href = `tel:${taller.telefono}`)}
-                >
-                  Llamar
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="flex-1"
-                  onClick={() =>
-                    window.open(
-                      `https://wa.me/${telefonoDigitos}`,
-                      '_blank',
-                      'noopener,noreferrer',
-                    )
-                  }
-                >
-                  WhatsApp
-                </Button>
-              </div>
-            )}
-          </div>
-
-          {/* Precios por modelo */}
-          <div className="rounded-lg border border-stone-200 bg-white p-3.5 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-              Precios por modelo
-            </div>
-            {precios.length === 0 ? (
-              <p className="mt-2 text-sm text-stone-500">A convenir.</p>
+            {articulos.length === 0 ? (
+              <p className="mt-2 text-sm text-stone-500">
+                No hay artículos asignados a este taller.
+              </p>
             ) : (
               <div className="mt-2 divide-y divide-stone-100">
-                {precios.map(([modeloId, precio]) => (
-                  <div key={modeloId} className="flex items-center justify-between py-1.5">
-                    <span className="text-sm text-stone-700">{nombreModelo(modeloId)}</span>
-                    <span className="text-sm font-medium text-stone-900">
-                      <Money value={precio} />
+                {articulos.map((articulo) => (
+                  <div
+                    key={articulo.id}
+                    className="flex items-center justify-between gap-3 py-1.5"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-stone-800">
+                        {articulo.nombre || articulo.descripcion || 'Artículo'}
+                      </div>
+                      <div className="font-mono text-[10px] text-stone-400">
+                        {articulo.codigoArticulo}
+                      </div>
+                    </div>
+                    <span className="shrink-0 text-xs text-stone-500">
+                      {articulo.cantidadPrendas}{' '}
+                      {articulo.cantidadPrendas === 1 ? 'prenda' : 'prendas'}
                     </span>
                   </div>
                 ))}
@@ -164,33 +169,56 @@ export function TallerDetalleModal({ taller, stats, onClose, onEdit, onDelete }:
             )}
           </div>
 
-          {/* Nota */}
-          {taller.nota && (
-            <div className="rounded-lg border border-stone-200 bg-white p-3.5 shadow-sm">
-              <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-                Nota
+          {(precios.length > 0 || taller.nota) && (
+            <details className="group rounded-lg border border-stone-200 bg-white shadow-sm">
+              <summary className="flex cursor-pointer list-none items-center justify-between px-3.5 py-2.5 text-xs font-semibold uppercase tracking-wide text-stone-500">
+                Precios y nota
+                <span className="text-stone-400 transition-transform group-open:rotate-180">
+                  ⌄
+                </span>
+              </summary>
+              <div className="space-y-3 border-t border-stone-100 p-3.5">
+                <div>
+                  <div className="text-[11px] font-medium text-stone-500">Precios por modelo</div>
+                  {precios.length === 0 ? (
+                    <p className="mt-1 text-sm text-stone-500">A convenir.</p>
+                  ) : (
+                    <div className="mt-1 divide-y divide-stone-100">
+                      {precios.map(([modeloId, precio]) => (
+                        <div key={modeloId} className="flex items-center justify-between py-1.5">
+                          <span className="text-sm text-stone-700">{nombreModelo(modeloId)}</span>
+                          <span className="text-sm font-medium text-stone-900">
+                            <Money value={precio} />
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {taller.nota && (
+                  <div>
+                    <div className="text-[11px] font-medium text-stone-500">Nota</div>
+                    <p className="mt-1 whitespace-pre-wrap text-sm text-stone-600">
+                      {taller.nota}
+                    </p>
+                  </div>
+                )}
               </div>
-              <p className="mt-2 whitespace-pre-wrap text-sm text-stone-600">{taller.nota}</p>
-            </div>
+            </details>
           )}
         </div>
 
         {/* Pie */}
-        <div className="flex flex-col gap-2 border-t border-stone-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div className="order-2 text-center text-[11px] text-stone-500 sm:order-1 sm:text-left">
-            {stats.activos} cortes activos · {stats.prendas} prendas
-          </div>
-          <div className="order-1 flex gap-2">
-            <Button variant="danger" className="flex-1 sm:flex-none" onClick={onDelete}>
-              Eliminar
-            </Button>
-            <Button variant="secondary" className="flex-1 sm:flex-none" onClick={onClose}>
-              Cerrar
-            </Button>
-            <Button className="flex-1 sm:flex-none" onClick={onEdit}>
-              Editar
-            </Button>
-          </div>
+        <div className="flex gap-2 border-t border-stone-200 bg-white px-4 py-3 sm:justify-end sm:px-6">
+          <Button variant="danger" className="flex-1 sm:flex-none" onClick={onDelete}>
+            Eliminar
+          </Button>
+          <Button variant="secondary" className="flex-1 sm:flex-none" onClick={onClose}>
+            Cerrar
+          </Button>
+          <Button className="flex-1 sm:flex-none" onClick={onEdit}>
+            Editar
+          </Button>
         </div>
       </div>
     </div>
