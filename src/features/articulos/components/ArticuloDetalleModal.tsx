@@ -226,7 +226,7 @@ export function ArticuloDetalleModal({ articulo, onClose, onEdit, onDelete }: Pr
                   <div className="text-xs text-stone-600">Taller y mano de obra</div>
                   {articulo.tallerNombre && (
                     <div className="mt-0.5 inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
-                      🧵 {articulo.tallerNombre}
+                      {articulo.tallerNombre}
                     </div>
                   )}
                 </div>
