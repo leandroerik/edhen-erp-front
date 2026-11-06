@@ -6,6 +6,7 @@ import { siguienteId } from '../../../utils/codigos'
 import { resumenPagosPorTaller } from '../../pagos/pagos.utils'
 import type { Taller } from '../../../types'
 import { TallerModal } from '../components/TallerModal'
+import { TallerDetalleModal } from '../components/TallerDetalleModal'
 
 function iniciales(nombre: string) {
   const partes = nombre.trim().split(/\s+/).filter(Boolean)
@@ -19,6 +20,7 @@ export function TalleresPage() {
   const [busqueda, setBusqueda] = useState('')
   const [modalAbierto, setModalAbierto] = useState(false)
   const [editando, setEditando] = useState<Taller | null>(null)
+  const [viendo, setViendo] = useState<Taller | null>(null)
 
   const statsPorTaller = useMemo(() => {
     const mapa = new Map<
@@ -75,8 +77,13 @@ export function TalleresPage() {
   }
 
   const abrirEditar = (taller: Taller) => {
+    setViendo(null)
     setEditando(taller)
     setModalAbierto(true)
+  }
+
+  const abrirDetalle = (taller: Taller) => {
+    setViendo(taller)
   }
 
   const cerrarModal = () => {
@@ -90,6 +97,8 @@ export function TalleresPage() {
       stats && stats.cortes > 0 ? ` Tiene ${stats.cortes} corte(s) asociado(s).` : ''
     if (window.confirm(`¿Eliminar el taller "${taller.nombre}"?${detalle}`)) {
       deleteTaller(taller.id)
+      if (viendo?.id === taller.id) setViendo(null)
+      if (editando?.id === taller.id) setEditando(null)
     }
   }
 
@@ -171,14 +180,14 @@ export function TalleresPage() {
               prendas: 0,
               saldo: 0,
             }
-            const modelosConPrecio = Object.keys(t.precioPorPrendaPorModelo || {}).length
 
             return (
               <div
                 key={t.id}
-                className="flex flex-col rounded-xl border border-stone-200 bg-white p-3.5 shadow-sm"
+                onClick={() => abrirDetalle(t)}
+                className="cursor-pointer rounded-xl border border-stone-200 bg-white p-3.5 shadow-sm transition-colors hover:border-amber-300 hover:bg-amber-50/20 active:bg-stone-50"
               >
-                <div className="flex items-start gap-2.5">
+                <div className="flex items-center gap-2.5">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-amber-200 bg-amber-50 text-xs font-semibold text-amber-800">
                     {iniciales(t.nombre)}
                   </div>
@@ -194,114 +203,46 @@ export function TalleresPage() {
                       )}
                     </div>
                   </div>
+                  <span className="shrink-0 text-xs font-medium text-amber-700">Ver →</span>
                 </div>
 
-                <div className="mt-3 grid grid-cols-3 gap-2 rounded-lg bg-stone-50 px-2.5 py-2 text-xs">
-                  <div>
-                    <div className="text-[10px] text-stone-500">Cortes</div>
-                    <div className="font-semibold text-stone-900">{stats.cortes}</div>
-                    <div className="text-[10px] text-stone-400">{stats.activos} activos</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] text-stone-500">Prendas</div>
-                    <div className="font-semibold text-stone-900">{stats.prendas}</div>
-                    <div className="text-[10px] text-stone-400">en total</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-[10px] text-stone-500">Saldo</div>
-                    <div
+                <div className="mt-2.5 flex items-center justify-between gap-2 rounded-lg bg-stone-50 px-2.5 py-1.5 text-xs">
+                  <span className="text-stone-500">
+                    Cortes activos:{' '}
+                    <strong className="font-semibold text-stone-900">{stats.activos}</strong>
+                  </span>
+                  <span className="text-stone-500">
+                    Saldo:{' '}
+                    <strong
                       className={`font-semibold ${
                         stats.saldo > 0 ? 'text-amber-800' : 'text-emerald-700'
                       }`}
                     >
                       <Money value={stats.saldo} />
-                    </div>
-                    <div className="text-[10px] text-stone-400">
-                      {stats.saldo > 0 ? 'pendiente' : 'al día'}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-2 space-y-1 text-xs text-stone-600">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-stone-400">Teléfono:</span>
-                    {t.telefono ? (
-                      <a href={`tel:${t.telefono}`} className="truncate hover:underline">
-                        {t.telefono}
-                      </a>
-                    ) : (
-                      <span>-</span>
-                    )}
-                  </div>
-                  {t.direccion && (
-                    <div className="flex items-center gap-1.5">
-                      <span className="shrink-0 text-stone-400">Dirección:</span>
-                      <span className="truncate">{t.direccion}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-1.5">
-                    <span className="shrink-0 text-stone-400">Precios:</span>
-                    <span>
-                      {modelosConPrecio > 0
-                        ? `${modelosConPrecio} modelo${modelosConPrecio === 1 ? '' : 's'} con precio`
-                        : 'A convenir'}
-                    </span>
-                  </div>
-                  {t.nota && (
-                    <div className="truncate text-stone-500" title={t.nota}>
-                      {t.nota}
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-stone-100 pt-3">
-                  <div className="flex flex-wrap gap-2">
-                    {t.telefono && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => (window.location.href = `tel:${t.telefono}`)}
-                      >
-                        Llamar
-                      </Button>
-                    )}
-                    {t.telefono && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() =>
-                          window.open(
-                            `https://wa.me/${t.telefono.replace(/\D/g, '')}`,
-                            '_blank',
-                            'noopener,noreferrer',
-                          )
-                        }
-                      >
-                        WhatsApp
-                      </Button>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => abrirEditar(t)}
-                      className="rounded px-2 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-900"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(t)}
-                      className="rounded px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50"
-                    >
-                      Eliminar
-                    </button>
-                  </div>
+                    </strong>
+                  </span>
                 </div>
               </div>
             )
           })}
         </div>
+      )}
+
+      {viendo && (
+        <TallerDetalleModal
+          taller={viendo}
+          stats={
+            statsPorTaller.get(viendo.id) ?? {
+              cortes: 0,
+              activos: 0,
+              prendas: 0,
+              saldo: 0,
+            }
+          }
+          onClose={() => setViendo(null)}
+          onEdit={() => abrirEditar(viendo)}
+          onDelete={() => handleDelete(viendo)}
+        />
       )}
 
       {modalAbierto && (

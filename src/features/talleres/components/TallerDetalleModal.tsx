@@ -1,0 +1,198 @@
+import { Button } from '../../../shared/components/Button'
+import { Money } from '../../../shared/components/Money'
+import { mockModelos } from '../../../data/mock'
+import type { Taller } from '../../../types'
+
+interface Stats {
+  cortes: number
+  activos: number
+  prendas: number
+  saldo: number
+}
+
+interface Props {
+  taller: Taller
+  stats: Stats
+  onClose: () => void
+  onEdit: () => void
+  onDelete: () => void
+}
+
+function iniciales(nombre: string) {
+  const partes = nombre.trim().split(/\s+/).filter(Boolean)
+  const primera = partes[0]?.charAt(0) ?? ''
+  const segunda = partes[1]?.charAt(0) ?? ''
+  return `${primera}${segunda}`.toUpperCase() || '?'
+}
+
+function nombreModelo(id: string) {
+  return mockModelos.find((m) => m.id === id)?.nombre ?? id
+}
+
+export function TallerDetalleModal({ taller, stats, onClose, onEdit, onDelete }: Props) {
+  const precios = Object.entries(taller.precioPorPrendaPorModelo || {})
+  const telefonoDigitos = taller.telefono.replace(/\D/g, '')
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4">
+      <div className="flex max-h-[95vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-h-[92vh] sm:max-w-lg sm:rounded-xl">
+        {/* Cabecera */}
+        <div className="flex items-start justify-between gap-2 border-b border-stone-200 px-4 py-3 sm:px-6 sm:py-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-amber-200 bg-amber-50 text-sm font-semibold text-amber-800">
+              {iniciales(taller.nombre)}
+            </div>
+            <div className="min-w-0">
+              <h2 className="truncate text-base font-semibold text-stone-900 sm:text-lg">
+                {taller.nombre}
+              </h2>
+              <p className="mt-0.5 text-xs text-stone-500">
+                {taller.especialidad || 'Sin especialidad'}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Cuerpo */}
+        <div className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
+          {/* Stats */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="rounded-lg border border-stone-200 bg-white p-2.5 text-center shadow-sm">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-stone-500">
+                Cortes
+              </div>
+              <div className="mt-0.5 text-base font-bold text-stone-900">{stats.cortes}</div>
+            </div>
+            <div className="rounded-lg border border-stone-200 bg-white p-2.5 text-center shadow-sm">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-stone-500">
+                Activos
+              </div>
+              <div className="mt-0.5 text-base font-bold text-stone-900">{stats.activos}</div>
+            </div>
+            <div className="rounded-lg border border-stone-200 bg-white p-2.5 text-center shadow-sm">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-stone-500">
+                Prendas
+              </div>
+              <div className="mt-0.5 text-base font-bold text-stone-900">{stats.prendas}</div>
+            </div>
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-2.5 text-center shadow-sm">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-emerald-700">
+                Saldo
+              </div>
+              <div className="mt-0.5 whitespace-nowrap text-base font-bold text-emerald-900">
+                <Money value={stats.saldo} />
+              </div>
+            </div>
+          </div>
+
+          {/* Contacto */}
+          <div className="rounded-lg border border-stone-200 bg-white p-3.5 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+              Contacto
+            </div>
+            <div className="mt-2 space-y-1.5 text-sm text-stone-700">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-stone-500">Teléfono</span>
+                {taller.telefono ? (
+                  <a href={`tel:${taller.telefono}`} className="font-medium hover:underline">
+                    {taller.telefono}
+                  </a>
+                ) : (
+                  <span className="text-stone-400">-</span>
+                )}
+              </div>
+              {taller.direccion && (
+                <div className="flex items-center justify-between gap-3">
+                  <span className="shrink-0 text-stone-500">Dirección</span>
+                  <span className="truncate text-right">{taller.direccion}</span>
+                </div>
+              )}
+            </div>
+            {telefonoDigitos && (
+              <div className="mt-3 flex gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="flex-1"
+                  onClick={() => (window.location.href = `tel:${taller.telefono}`)}
+                >
+                  Llamar
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="flex-1"
+                  onClick={() =>
+                    window.open(
+                      `https://wa.me/${telefonoDigitos}`,
+                      '_blank',
+                      'noopener,noreferrer',
+                    )
+                  }
+                >
+                  WhatsApp
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Precios por modelo */}
+          <div className="rounded-lg border border-stone-200 bg-white p-3.5 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+              Precios por modelo
+            </div>
+            {precios.length === 0 ? (
+              <p className="mt-2 text-sm text-stone-500">A convenir.</p>
+            ) : (
+              <div className="mt-2 divide-y divide-stone-100">
+                {precios.map(([modeloId, precio]) => (
+                  <div key={modeloId} className="flex items-center justify-between py-1.5">
+                    <span className="text-sm text-stone-700">{nombreModelo(modeloId)}</span>
+                    <span className="text-sm font-medium text-stone-900">
+                      <Money value={precio} />
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Nota */}
+          {taller.nota && (
+            <div className="rounded-lg border border-stone-200 bg-white p-3.5 shadow-sm">
+              <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                Nota
+              </div>
+              <p className="mt-2 whitespace-pre-wrap text-sm text-stone-600">{taller.nota}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Pie */}
+        <div className="flex flex-col gap-2 border-t border-stone-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div className="order-2 text-center text-[11px] text-stone-500 sm:order-1 sm:text-left">
+            {stats.activos} cortes activos · {stats.prendas} prendas
+          </div>
+          <div className="order-1 flex gap-2">
+            <Button variant="danger" className="flex-1 sm:flex-none" onClick={onDelete}>
+              Eliminar
+            </Button>
+            <Button variant="secondary" className="flex-1 sm:flex-none" onClick={onClose}>
+              Cerrar
+            </Button>
+            <Button className="flex-1 sm:flex-none" onClick={onEdit}>
+              Editar
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

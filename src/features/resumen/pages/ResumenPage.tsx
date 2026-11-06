@@ -66,7 +66,7 @@ function generarCurvaSuave(puntos: Array<{ x: number; y: number }>): string {
   return d
 }
 
-export function StockPage() {
+export function ResumenPage() {
   const { compras, encimadas, articulos, cortes, pagos } = useErpStore()
 
   // Cotización USD persistida en localStorage

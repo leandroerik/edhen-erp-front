@@ -1,7 +1,7 @@
 import { Link, NavLink } from 'react-router-dom'
 
 const navItems = [
-  { to: '/stock', label: 'Resumen' },
+  { to: '/resumen', label: 'Resumen' },
   { to: '/rollos', label: 'Textil' },
   { to: '/articulos', label: 'Artículos' },
   { to: '/carga-capas', label: 'Carga de capas' },
@@ -13,7 +13,7 @@ const navItems = [
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <aside className="flex h-full w-56 shrink-0 flex-col border-r border-stone-200 bg-stone-50">
-      <Link to="/stock" onClick={onNavigate} className="px-4 py-5">
+      <Link to="/resumen" onClick={onNavigate} className="px-4 py-5">
         <img
           src={`${import.meta.env.BASE_URL}logo.png`}
           alt="edhen"

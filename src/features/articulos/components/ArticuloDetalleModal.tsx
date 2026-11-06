@@ -130,7 +130,44 @@ export function ArticuloDetalleModal({ articulo, onClose, onEdit, onDelete }: Pr
               </span>
               <span className="text-xs text-stone-500">{cantidad} prendas</span>
             </div>
-            <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {/* Mobile: resumen compacto */}
+            <div className="mt-2 divide-y divide-stone-100 rounded-xl border border-stone-200 bg-white px-3.5 shadow-sm sm:hidden">
+              <div className="flex items-baseline justify-between gap-3 py-2.5">
+                <span className="text-xs text-stone-600">Venta total</span>
+                <div className="text-right">
+                  <div className="text-base font-bold text-stone-900">
+                    <Money value={ventaTotal} />
+                  </div>
+                  <div className="text-[10px] text-stone-500">
+                    {formatARS(precioVenta)} por prenda
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-baseline justify-between gap-3 py-2.5">
+                <span className="text-xs text-stone-600">Costo de producción</span>
+                <div className="text-right">
+                  <div className="text-base font-bold text-stone-900">
+                    <Money value={costoTotalProduccion} />
+                  </div>
+                  <div className="text-[10px] text-stone-500">
+                    {formatARS(costoUnitario)} por prenda
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-baseline justify-between gap-3 py-2.5">
+                <span className="text-xs font-medium text-emerald-800">Ganancia neta</span>
+                <div className="text-right">
+                  <div className="text-base font-bold text-emerald-900">
+                    <Money value={gananciaTotal} />
+                  </div>
+                  <div className="text-[10px] font-medium text-emerald-700">
+                    +{formatARS(gananciaUnitaria)} por prenda · {margenReal.toFixed(1)}% margen
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-2 hidden grid-cols-1 gap-3 sm:grid sm:grid-cols-3">
               {/* Venta total */}
               <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 shadow-sm">
                 <div className="text-xs font-medium text-amber-800">Venta total</div>
@@ -171,7 +208,51 @@ export function ArticuloDetalleModal({ articulo, onClose, onEdit, onDelete }: Pr
             <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
               Composición del costo
             </span>
-            <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {/* Mobile: composición compacta */}
+            <div className="mt-2 divide-y divide-stone-100 rounded-xl border border-stone-200 bg-white px-3.5 shadow-sm sm:hidden">
+              <div className="flex items-baseline justify-between gap-3 py-2.5">
+                <span className="text-xs text-stone-600">Telas consumidas</span>
+                <div className="text-right">
+                  <div className="text-sm font-bold text-stone-900">
+                    <Money value={costoTelaTotal} />
+                  </div>
+                  <div className="text-[10px] text-stone-500">
+                    {formatARS(costoTelaPorPrenda)} por prenda
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-baseline justify-between gap-3 py-2.5">
+                <div className="min-w-0">
+                  <div className="text-xs text-stone-600">Taller y mano de obra</div>
+                  {articulo.tallerNombre && (
+                    <div className="mt-0.5 inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                      🧵 {articulo.tallerNombre}
+                    </div>
+                  )}
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="text-sm font-bold text-stone-900">
+                    <Money value={pagoTotalTalleres} />
+                  </div>
+                  <div className="text-[10px] text-stone-500">
+                    {formatARS(manoObraPrenda)} por prenda
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-baseline justify-between gap-3 py-2.5">
+                <span className="text-xs text-stone-600">Avíos e insumos</span>
+                <div className="text-right">
+                  <div className="text-sm font-bold text-stone-900">
+                    <Money value={aviosTotales} />
+                  </div>
+                  <div className="text-[10px] text-stone-500">
+                    {formatARS(aviosPorPrenda)} por prenda
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-2 hidden grid-cols-1 gap-3 sm:grid sm:grid-cols-3">
               {/* Costo total telas */}
               <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
                 <div className="text-xs font-medium text-stone-500">
@@ -229,7 +310,51 @@ export function ArticuloDetalleModal({ articulo, onClose, onEdit, onDelete }: Pr
                 <strong className="text-stone-900"><Money value={costoTelaTotal} /></strong>
               </span>
             </div>
-            <div className="overflow-x-auto rounded-xl border border-stone-200">
+            {/* Mobile: lista compacta de telas */}
+            <div className="space-y-2 sm:hidden">
+              {telas.length === 0 ? (
+                <div className="rounded-lg border border-stone-200 bg-white p-3 text-center text-xs text-stone-400">
+                  Sin telas asignadas.
+                </div>
+              ) : (
+                telas.map((t, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-lg border border-stone-200 bg-white p-2.5 text-xs"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate font-medium text-stone-900">{t.telaNombre}</div>
+                        <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-stone-500">
+                          <span
+                            className={`h-2 w-2 shrink-0 rounded-full border border-stone-300 ${
+                              COLOR_SWATCH[t.colorNombre] ?? 'bg-stone-200'
+                            }`}
+                          />
+                          {t.colorNombre}
+                          {t.compraCodigo && (
+                            <span className="rounded bg-stone-100 px-1 text-[10px] text-stone-500">
+                              {t.compraCodigo}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="font-semibold text-stone-900">
+                          <Money value={t.costoUsado} />
+                        </div>
+                        <div className="text-[10px] text-stone-500">
+                          {Number(t.cantidadUsar || 0).toFixed(1)}{' '}
+                          {t.unidad === 'METRO' ? 'm' : 'kg'} · {formatRollos(t.rollosUsados)} rollos
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="hidden overflow-x-auto rounded-xl border border-stone-200 sm:block">
               <table className="w-full min-w-[560px] divide-y divide-stone-200">
                 <thead className="bg-stone-50">
                   <tr>
@@ -301,7 +426,45 @@ export function ArticuloDetalleModal({ articulo, onClose, onEdit, onDelete }: Pr
                   <strong className="text-stone-900"><Money value={aviosTotales} /></strong>
                 </span>
               </div>
-              <div className="overflow-x-auto rounded-xl border border-stone-200">
+              {/* Mobile: lista compacta de avíos */}
+              <div className="space-y-2 sm:hidden">
+                {avios.map((av, idx) => {
+                  const porPrenda = av.porPrenda !== false
+                  const monto = Number(av.monto) || 0
+                  const totalAvio = porPrenda ? monto * cantidad : monto
+                  return (
+                    <div
+                      key={idx}
+                      className="rounded-lg border border-stone-200 bg-white p-2.5 text-xs"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="truncate font-medium text-stone-900">{av.nombre}</div>
+                          <span
+                            className={`mt-0.5 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                              porPrenda
+                                ? 'border-stone-200 bg-stone-50 text-stone-600'
+                                : 'border-amber-200 bg-amber-50 text-amber-800'
+                            }`}
+                          >
+                            {porPrenda ? 'Por prenda' : 'Fijo lote'}
+                          </span>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <div className="font-semibold text-stone-900">
+                            <Money value={totalAvio} />
+                          </div>
+                          <div className="text-[10px] text-stone-500">
+                            <Money value={monto} /> {porPrenda ? '/ un.' : 'total'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div className="hidden overflow-x-auto rounded-xl border border-stone-200 sm:block">
                 <table className="w-full min-w-[460px] divide-y divide-stone-200">
                   <thead className="bg-stone-50">
                     <tr>

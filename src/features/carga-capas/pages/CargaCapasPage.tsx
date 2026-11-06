@@ -6,6 +6,7 @@ import { ordenarPorFechaYCodigoDesc } from '../../../utils/orden'
 import { useErpStore } from '../../../data/erpStore'
 import type { Encimada } from '../../../types'
 import { EncimadaModal } from '../components/EncimadaModal'
+import { EncimadaDetalleModal } from '../components/EncimadaDetalleModal'
 
 const th = 'px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-stone-500'
 const thRight = `${th} text-right`
@@ -25,6 +26,7 @@ function totales(encimada: Encimada) {
 export function CargaCapasPage() {
   const { encimadas, articulos, saveEncimada, deleteEncimada } = useErpStore()
   const [open, setOpen] = useState(false)
+  const [viewing, setViewing] = useState<Encimada | null>(null)
   const [editing, setEditing] = useState<Encimada | null>(null)
   const nextCodigo = siguienteCodigo(
     'ENC',
@@ -54,6 +56,7 @@ export function CargaCapasPage() {
       return
     }
     deleteEncimada(encimada.id)
+    if (viewing?.id === encimada.id) setViewing(null)
     if (editing?.id === encimada.id) setEditing(null)
   }
 
@@ -86,23 +89,17 @@ export function CargaCapasPage() {
           encimadasOrdenadas.map((encimada) => {
             const t = totales(encimada)
             const modelosTexto = encimada.items
+              .filter((i) => i.modeloNombre.trim())
               .map(
                 (i) =>
-                  `${i.modeloNombre}${
-                    typeof i.porcentaje === 'number'
-                      ? ` (${i.porcentaje}%)`
-                      : i.cantidad
-                      ? ` (${i.cantidad} t.)`
-                      : ''
-                  }`,
+                  `${i.modeloNombre}: ${t.capas * (Number(i.cantidad) || 0)} prendas`,
               )
-              .filter(Boolean)
-              .join(', ')
+              .join(' · ')
 
             return (
               <div
                 key={encimada.id}
-                onClick={() => setEditing(encimada)}
+                onClick={() => setViewing(encimada)}
                 className="cursor-pointer rounded-lg border border-stone-200 bg-white p-3.5 shadow-sm active:bg-stone-50 transition-colors"
               >
                 <div className="flex items-center justify-between border-b border-stone-100 pb-2">
@@ -144,7 +141,7 @@ export function CargaCapasPage() {
                   <span className="text-stone-500">
                     Total prendas: <strong className="text-stone-900">{t.prendas}</strong>
                   </span>
-                  <span className="font-medium text-amber-700">Editar →</span>
+                  <span className="font-medium text-amber-700">Ver detalles →</span>
                 </div>
               </div>
             )
@@ -179,7 +176,7 @@ export function CargaCapasPage() {
                 return (
                   <tr
                     key={encimada.id}
-                    onClick={() => setEditing(encimada)}
+                    onClick={() => setViewing(encimada)}
                     className="cursor-pointer hover:bg-stone-50"
                   >
                     <td className={`${td} font-medium`}>{encimada.codigo}</td>
@@ -198,31 +195,41 @@ export function CargaCapasPage() {
                     <td className={tdRight}>{t.capas}</td>
                     <td className={`${td} text-stone-600`}>
                       {encimada.items
+                        .filter((i) => i.modeloNombre.trim())
                         .map(
                           (i) =>
-                            `${i.modeloNombre}${
-                              typeof i.porcentaje === 'number'
-                                ? ` (${i.porcentaje}%)`
-                                : i.cantidad
-                                ? ` (${i.cantidad} talles)`
-                                : ''
-                            }`,
+                            `${i.modeloNombre}: ${t.capas * (Number(i.cantidad) || 0)} prendas`,
                         )
-                        .filter(Boolean)
-                        .join(', ') || '-'}
+                        .join(' · ') || '-'}
                     </td>
                     <td className={`${tdRight} font-semibold text-stone-900`}>{t.prendas}</td>
                     <td className="px-4 py-2.5 text-right">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleEliminar(encimada)
-                        }}
-                        className="rounded px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50"
+                      <div
+                        className="flex items-center justify-end gap-1.5"
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        Eliminar
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => setViewing(encimada)}
+                          className="rounded px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50"
+                        >
+                          Ver
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditing(encimada)}
+                          className="rounded px-2 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-900"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleEliminar(encimada)}
+                          className="rounded px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )
@@ -231,6 +238,19 @@ export function CargaCapasPage() {
           </tbody>
         </table>
       </div>
+
+      {viewing && (
+        <EncimadaDetalleModal
+          encimada={viewing}
+          onClose={() => setViewing(null)}
+          onEdit={() => {
+            const enc = viewing
+            setViewing(null)
+            setEditing(enc)
+          }}
+          onDelete={() => handleEliminar(viewing)}
+        />
+      )}
 
       {open && (
         <EncimadaModal

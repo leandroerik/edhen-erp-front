@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { MainLayout } from './shared/layout/MainLayout'
-import { StockPage } from './features/stock/pages/StockPage'
+import { ResumenPage } from './features/resumen/pages/ResumenPage'
 import { RollosPage } from './features/rollos/pages/RollosPage'
 import { CortesPage } from './features/cortes/pages/CortesPage'
 import { TalleresPage } from './features/talleres/pages/TalleresPage'
@@ -13,8 +13,9 @@ function App() {
   return (
     <MainLayout>
       <Routes>
-        <Route path="/" element={<Navigate to="/stock" replace />} />
-        <Route path="/stock" element={<StockPage />} />
+        <Route path="/" element={<Navigate to="/resumen" replace />} />
+        <Route path="/resumen" element={<ResumenPage />} />
+        <Route path="/stock" element={<Navigate to="/resumen" replace />} />
         <Route path="/rollos" element={<RollosPage />} />
         <Route path="/articulos" element={<ArticulosPage />} />
         <Route path="/carga-capas" element={<CargaCapasPage />} />
@@ -22,7 +23,7 @@ function App() {
         <Route path="/talleres" element={<TalleresPage />} />
         <Route path="/pagos" element={<PagosPage />} />
         <Route path="/ajustes" element={<AjustesPage />} />
-        <Route path="*" element={<Navigate to="/stock" replace />} />
+        <Route path="*" element={<Navigate to="/resumen" replace />} />
       </Routes>
     </MainLayout>
   )
