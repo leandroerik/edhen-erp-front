@@ -19,6 +19,9 @@ const tdRight = `${td} text-right tabular-nums`
 
 const FILAS_POR_PAGINA = 8
 const DOLAR_STORAGE_KEY = 'edhen_erp_cotizacion_dolar'
+const KPI_STORAGE_KEY = 'edhen_erp_resumen_kpis_ocultos'
+const KPI_IDS = ['invertido', 'stock', 'cortes', 'saldo', 'dolar'] as const
+type KpiId = (typeof KPI_IDS)[number]
 
 interface StockGeneralTela {
   telaId: string
@@ -36,6 +39,26 @@ interface StockGeneralTela {
   coloresDisponibles: ColorDisponible[]
   valorizadoPesos: number
   info: ReturnType<typeof getStockInfo>
+}
+
+function OcultarKpiButton({
+  label,
+  onClick,
+}: {
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={`Ocultar ${label}`}
+      aria-label={`Ocultar tarjeta ${label}`}
+      className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded text-[11px] leading-none text-stone-300 transition-colors hover:bg-stone-100 hover:text-stone-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+    >
+      ✕
+    </button>
+  )
 }
 
 // Generador de curvas Bezier suaves (smooth cardinal spline)
@@ -98,6 +121,35 @@ export function ResumenPage() {
       setCotizacionDolar(val)
     }
   }
+
+  // Tarjetas KPI ocultables (persistidas por navegador)
+  const [kpisOcultos, setKpisOcultos] = useState<KpiId[]>(() => {
+    try {
+      const guardado = localStorage.getItem(KPI_STORAGE_KEY)
+      if (!guardado) return []
+      const parsed: unknown = JSON.parse(guardado)
+      if (!Array.isArray(parsed)) return []
+      return parsed.filter((id): id is KpiId =>
+        (KPI_IDS as readonly string[]).includes(String(id)),
+      )
+    } catch {
+      return []
+    }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(KPI_STORAGE_KEY, JSON.stringify(kpisOcultos))
+    } catch (e) {
+      console.error('Error guardando tarjetas ocultas', e)
+    }
+  }, [kpisOcultos])
+
+  const ocultarKpi = (id: KpiId) =>
+    setKpisOcultos((prev) => (prev.includes(id) ? prev : [...prev, id]))
+
+  const kpiVisible = (id: KpiId) => !kpisOcultos.includes(id)
+  const algunKpiOculto = kpisOcultos.length > 0
 
   // Stock detallado y agregado
   const usosStock = useMemo(
@@ -380,18 +432,42 @@ export function ResumenPage() {
   return (
     <div className="space-y-6">
       {/* Cabecera */}
-      <div>
-        <h1 className="text-xl font-semibold text-stone-900 sm:text-2xl">Resumen</h1>
-        <p className="mt-0.5 text-xs text-stone-500 sm:text-sm">
-          Métricas clave de taller, rendimiento por tela y valorización de inventario.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h1 className="text-xl font-semibold text-stone-900 sm:text-2xl">Resumen</h1>
+          <p className="mt-0.5 text-xs text-stone-500 sm:text-sm">
+            Métricas clave de taller, rendimiento por tela y valorización de inventario.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setKpisOcultos(algunKpiOculto ? [] : [...KPI_IDS])}
+          aria-expanded={!algunKpiOculto}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-stone-300 bg-white px-3 py-1.5 text-xs font-medium text-stone-600 shadow-sm transition-colors hover:bg-stone-50"
+        >
+          <span aria-hidden="true">{algunKpiOculto ? '↺' : '▾'}</span>
+          {algunKpiOculto ? 'Mostrar tarjetas' : 'Ocultar tarjetas'}
+          {algunKpiOculto && (
+            <span className="rounded-full bg-stone-100 px-1.5 py-0.5 text-[10px] font-semibold text-stone-600">
+              {kpisOcultos.length}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Tarjetas KPI */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {/* Total Invertido */}
-        <div className="rounded-xl border border-t-2 border-stone-200 border-t-amber-600/70 bg-white p-3 shadow-sm sm:p-3.5">
-          <div className="text-xs font-medium text-stone-500">Total invertido</div>
+        <div
+          className={`relative rounded-xl border border-t-2 border-stone-200 border-t-amber-600/70 bg-white p-3 shadow-sm sm:p-3.5 ${
+            kpiVisible('invertido') ? '' : 'hidden'
+          }`}
+        >
+          <OcultarKpiButton
+            label="Total invertido"
+            onClick={() => ocultarKpi('invertido')}
+          />
+          <div className="pr-6 text-xs font-medium text-stone-500">Total invertido</div>
           <div className="mt-1 text-base font-semibold tabular-nums text-stone-900 sm:text-lg">
             <Money value={totalInvertidoCompras} />
           </div>
@@ -401,8 +477,16 @@ export function ResumenPage() {
         </div>
 
         {/* Stock valorizado */}
-        <div className="rounded-xl border border-t-2 border-stone-200 border-t-emerald-600/70 bg-white p-3 shadow-sm sm:p-3.5">
-          <div className="text-xs font-medium text-stone-500">Stock valorizado</div>
+        <div
+          className={`relative rounded-xl border border-t-2 border-stone-200 border-t-emerald-600/70 bg-white p-3 shadow-sm sm:p-3.5 ${
+            kpiVisible('stock') ? '' : 'hidden'
+          }`}
+        >
+          <OcultarKpiButton
+            label="Stock valorizado"
+            onClick={() => ocultarKpi('stock')}
+          />
+          <div className="pr-6 text-xs font-medium text-stone-500">Stock valorizado</div>
           <div className="mt-1 text-base font-semibold tabular-nums text-stone-900 sm:text-lg">
             <Money value={stockValorizadoTotal} />
           </div>
@@ -412,8 +496,16 @@ export function ResumenPage() {
         </div>
 
         {/* Cortes en taller */}
-        <div className="rounded-xl border border-t-2 border-stone-200 border-t-stone-400/70 bg-white p-3 shadow-sm sm:p-3.5">
-          <div className="text-xs font-medium text-stone-500">Cortes en taller</div>
+        <div
+          className={`relative rounded-xl border border-t-2 border-stone-200 border-t-stone-400/70 bg-white p-3 shadow-sm sm:p-3.5 ${
+            kpiVisible('cortes') ? '' : 'hidden'
+          }`}
+        >
+          <OcultarKpiButton
+            label="Cortes en taller"
+            onClick={() => ocultarKpi('cortes')}
+          />
+          <div className="pr-6 text-xs font-medium text-stone-500">Cortes en taller</div>
           <div className="mt-1 flex items-baseline gap-2">
             <span className="text-lg font-semibold text-stone-900">{cortesEnTaller}</span>
             <span className="text-xs text-stone-500">activos</span>
@@ -424,8 +516,16 @@ export function ResumenPage() {
         </div>
 
         {/* Total a pagar talleres */}
-        <div className="rounded-xl border border-t-2 border-stone-200 border-t-amber-600/70 bg-white p-3 shadow-sm sm:p-3.5">
-          <div className="text-xs font-medium text-stone-500">Saldo a pagar</div>
+        <div
+          className={`relative rounded-xl border border-t-2 border-stone-200 border-t-amber-600/70 bg-white p-3 shadow-sm sm:p-3.5 ${
+            kpiVisible('saldo') ? '' : 'hidden'
+          }`}
+        >
+          <OcultarKpiButton
+            label="Saldo a pagar"
+            onClick={() => ocultarKpi('saldo')}
+          />
+          <div className="pr-6 text-xs font-medium text-stone-500">Saldo a pagar</div>
           <div className="mt-1 text-base font-semibold tabular-nums text-stone-900 sm:text-lg">
             <Money value={totalAPagarTalleres} />
           </div>
@@ -435,8 +535,16 @@ export function ResumenPage() {
         </div>
 
         {/* Cotización Dólar Persistida */}
-        <div className="col-span-2 rounded-xl border border-t-2 border-stone-200 border-t-stone-400/70 bg-white p-3 shadow-sm sm:col-span-1 sm:p-3.5">
-          <label className="block text-xs font-medium text-stone-500">Cotización USD</label>
+        <div
+          className={`relative col-span-2 rounded-xl border border-t-2 border-stone-200 border-t-stone-400/70 bg-white p-3 shadow-sm sm:col-span-1 sm:p-3.5 ${
+            kpiVisible('dolar') ? '' : 'hidden'
+          }`}
+        >
+          <OcultarKpiButton
+            label="Cotización USD"
+            onClick={() => ocultarKpi('dolar')}
+          />
+          <label className="block pr-6 text-xs font-medium text-stone-500">Cotización USD</label>
           <div className="mt-1 flex items-center gap-1.5">
             <span className="text-xs font-semibold text-stone-400">$</span>
             <input
