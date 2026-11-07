@@ -19,9 +19,17 @@ const tdRight = `${td} text-right tabular-nums`
 
 const FILAS_POR_PAGINA = 8
 const DOLAR_STORAGE_KEY = 'edhen_erp_cotizacion_dolar'
-const KPI_STORAGE_KEY = 'edhen_erp_resumen_kpis_ocultos'
+const KPI_STORAGE_KEY = 'edhen_erp_resumen_kpis_ocultos_v2'
 const KPI_IDS = ['invertido', 'stock', 'cortes', 'saldo', 'dolar'] as const
 type KpiId = (typeof KPI_IDS)[number]
+
+function esPantallaMobile() {
+  try {
+    return window.matchMedia('(max-width: 767px)').matches
+  } catch {
+    return false
+  }
+}
 
 interface StockGeneralTela {
   telaId: string
@@ -126,15 +134,19 @@ export function ResumenPage() {
   const [kpisOcultos, setKpisOcultos] = useState<KpiId[]>(() => {
     try {
       const guardado = localStorage.getItem(KPI_STORAGE_KEY)
-      if (!guardado) return []
-      const parsed: unknown = JSON.parse(guardado)
-      if (!Array.isArray(parsed)) return []
-      return parsed.filter((id): id is KpiId =>
-        (KPI_IDS as readonly string[]).includes(String(id)),
-      )
+      if (guardado) {
+        const parsed: unknown = JSON.parse(guardado)
+        if (Array.isArray(parsed)) {
+          return parsed.filter((id): id is KpiId =>
+            (KPI_IDS as readonly string[]).includes(String(id)),
+          )
+        }
+      }
     } catch {
-      return []
+      // fallback
     }
+    // En mobile arrancan ocultas para no ocupar espacio; en desktop visibles.
+    return esPantallaMobile() ? [...KPI_IDS] : []
   })
 
   useEffect(() => {
@@ -274,7 +286,7 @@ export function ResumenPage() {
 
   // Filtros de disponibilidad por tela
   const [busqueda, setBusqueda] = useState('')
-  const [ocultarAgotadas, setOcultarAgotadas] = useState(false)
+  const [ocultarAgotadas, setOcultarAgotadas] = useState(() => esPantallaMobile())
   const [paginaStock, setPaginaStock] = useState(1)
   const [filasStock, setFilasStock] = useState(FILAS_POR_PAGINA)
 

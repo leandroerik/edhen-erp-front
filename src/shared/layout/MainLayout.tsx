@@ -1,9 +1,18 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Navbar } from './Navbar'
 import { Sidebar } from './Sidebar'
 
 export function MainLayout({ children }: { children: ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return
+    const alPresionar = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMobileMenuOpen(false)
+    }
+    window.addEventListener('keydown', alPresionar)
+    return () => window.removeEventListener('keydown', alPresionar)
+  }, [mobileMenuOpen])
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-stone-100">
@@ -16,11 +25,15 @@ export function MainLayout({ children }: { children: ReactNode }) {
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-50 flex md:hidden">
           <div
-            className="fixed inset-0 bg-black/50 transition-opacity"
+            className="fixed inset-0 bg-black/50"
             onClick={() => setMobileMenuOpen(false)}
+            aria-hidden="true"
           />
-          <div className="relative z-10 flex w-64 max-w-[80vw] flex-col bg-stone-50 shadow-xl">
-            <Sidebar onNavigate={() => setMobileMenuOpen(false)} />
+          <div className="relative z-10 flex h-full w-64 max-w-[80vw] flex-col bg-stone-50 shadow-xl">
+            <Sidebar
+              onNavigate={() => setMobileMenuOpen(false)}
+              onClose={() => setMobileMenuOpen(false)}
+            />
           </div>
         </div>
       )}

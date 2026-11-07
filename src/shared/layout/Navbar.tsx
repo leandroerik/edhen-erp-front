@@ -35,7 +35,14 @@ export function Navbar({ onOpenMobileMenu }: Props) {
             </svg>
           </button>
         )}
-        <span className="text-sm font-medium text-stone-700">Edhen ERP</span>
+        <Link to="/resumen" className="flex min-w-0 items-center md:hidden">
+          <img
+            src={`${import.meta.env.BASE_URL}logo.png`}
+            alt="edhen"
+            className="h-6 w-auto max-w-[120px] object-contain"
+          />
+        </Link>
+        <span className="hidden text-sm font-medium text-stone-700 md:inline">Edhen ERP</span>
       </div>
 
       <div className="flex items-center gap-2">
@@ -50,10 +57,15 @@ export function Navbar({ onOpenMobileMenu }: Props) {
           <span className={`inline-block text-[12px] ${sincronizando ? 'animate-spin' : ''}`}>
             🔄
           </span>
-          <span>
-            {sincronizando
-              ? 'Sincronizando...'
-              : syncFeedback || 'Sincronizar Sheets'}
+          <span className="whitespace-nowrap">
+            <span className="sm:hidden">
+              {sincronizando ? '...' : syncFeedback || 'Sheets'}
+            </span>
+            <span className="hidden sm:inline">
+              {sincronizando
+                ? 'Sincronizando...'
+                : syncFeedback || 'Sincronizar Sheets'}
+            </span>
           </span>
         </button>
 
