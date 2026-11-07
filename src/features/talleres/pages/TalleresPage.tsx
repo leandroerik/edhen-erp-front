@@ -177,6 +177,50 @@ export function TalleresPage() {
                   <p className="mt-0.5 truncate text-[11px] text-stone-500">
                     {t.especialidad || 'Sin especialidad'} · {stats.activos} activos
                   </p>
+                  <div className="mt-1 space-y-0.5 text-[10px] text-stone-500">
+                    {t.telefono && (
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <svg
+                          className="h-3 w-3 shrink-0 text-stone-400"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M3 5a2 2 0 012-2h2.28a1 1 0 01.95.68l1.1 3.29a1 1 0 01-.27 1.04L7.6 9.4a15.05 15.05 0 006.99 6.99l1.39-1.46a1 1 0 011.04-.27l3.29 1.1a1 1 0 01.68.95V19a2 2 0 01-2 2h-1C9.72 21 3 14.28 3 6V5z"
+                          />
+                        </svg>
+                        <span className="truncate">{t.telefono}</span>
+                      </div>
+                    )}
+                    {t.direccion && (
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <svg
+                          className="h-3 w-3 shrink-0 text-stone-400"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z"
+                          />
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                          />
+                        </svg>
+                        <span className="truncate">{t.direccion}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="shrink-0 text-right">
                   <div
