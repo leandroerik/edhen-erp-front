@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Button } from '../../../shared/components/Button'
+import { ConfirmModal } from '../../../shared/components/ConfirmModal'
 import {
   getGasUrl,
   setGasUrl,
@@ -31,6 +32,7 @@ export function AjustesPage() {
   const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null)
   const [guardadoMsg, setGuardadoMsg] = useState(false)
   const [syncResultMsg, setSyncResultMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [confirmAction, setConfirmAction] = useState<'limpiar' | 'demo' | null>(null)
 
   // Mensajes de Backup
   const [backupMsg, setBackupMsg] = useState<string | null>(null)
@@ -189,24 +191,19 @@ export function AjustesPage() {
   }
 
   // 3. LIMPIAR DATOS PARA CARGAR A MANO DE CERO
-  const handleLimpiarTodo = () => {
-    const confirmacion = window.confirm(
-      '¿Deseás vaciar todos los datos para empezar a cargar tu catálogo a mano desde cero?\n\n' +
-        'Te recomendamos hacer clic antes en "Guardar backup" para tener una copia de resguardo.',
-    )
-    if (!confirmacion) return
+  const ejecutarLimpiarTodo = () => {
     limpiarTodo()
+    setConfirmAction(null)
     setBackupMsg('✓ Sistema reiniciado. Todos los módulos quedaron en blanco listos para cargar datos a mano.')
     setBackupError(null)
   }
 
   // 4. RESTABLECER A DEMO
-  const handleResetearDemo = () => {
-    if (window.confirm('¿Deseás restaurar los datos de ejemplo iniciales (demo)?')) {
-      resetearADemo()
-      setBackupMsg('✓ Datos restablecidos a la versión demo.')
-      setBackupError(null)
-    }
+  const ejecutarResetDemo = () => {
+    resetearADemo()
+    setConfirmAction(null)
+    setBackupMsg('✓ Datos restablecidos a la versión demo.')
+    setBackupError(null)
   }
 
   const contadores = [
@@ -415,14 +412,14 @@ export function AjustesPage() {
           <div className="flex flex-wrap items-center gap-4">
             <button
               type="button"
-              onClick={handleLimpiarTodo}
+              onClick={() => setConfirmAction('limpiar')}
               className="text-stone-600 underline transition-colors hover:text-red-700"
             >
               Vaciar sistema
             </button>
             <button
               type="button"
-              onClick={handleResetearDemo}
+              onClick={() => setConfirmAction('demo')}
               className="text-amber-800 transition-colors hover:underline"
             >
               Restablecer demo
@@ -430,6 +427,37 @@ export function AjustesPage() {
           </div>
         </div>
       </section>
+
+      {confirmAction === 'limpiar' && (
+        <ConfirmModal
+          title="Vaciar sistema"
+          description={
+            <>
+              Se eliminarán todos los datos cargados en este navegador: artículos, compras,
+              cortes, encimadas, talleres y pagos. Te recomendamos descargar un backup antes de
+              continuar.
+            </>
+          }
+          confirmLabel="Vaciar sistema"
+          onConfirm={ejecutarLimpiarTodo}
+          onClose={() => setConfirmAction(null)}
+        />
+      )}
+
+      {confirmAction === 'demo' && (
+        <ConfirmModal
+          title="Restablecer demo"
+          description={
+            <>
+              Se reemplazarán los datos actuales por los datos de ejemplo (demo). Todo lo que
+              hayas cargado a mano se perderá.
+            </>
+          }
+          confirmLabel="Restablecer demo"
+          onConfirm={ejecutarResetDemo}
+          onClose={() => setConfirmAction(null)}
+        />
+      )}
     </div>
   )
 }

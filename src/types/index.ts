@@ -40,9 +40,7 @@ export interface Compra {
   unidadCompra: UnidadTela
   precioUnitario: number
   lotes: LoteColor[]
-  descuento?: number
   flete?: number
-  iva?: number
   notaRemito?: string
   total: number
   usada: boolean
@@ -56,6 +54,7 @@ export interface Taller {
   especialidad?: string
   nota?: string
   color?: string // color para identificar el taller en tags (hex)
+  activo?: boolean // los inactivos se conservan en el histórico
   precioPorPrendaPorModelo: Record<string, number> // modeloId -> precio pactado
 }
 

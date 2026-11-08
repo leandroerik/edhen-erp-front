@@ -13,11 +13,8 @@ const SHEETS = {
   CORTES: 'Cortes',
   ENCIMADAS: 'Encimadas',
   COMPRAS: 'Compras',
-  LOTES: 'Lotes_Stock',
   TALLERES: 'Talleres',
   PAGOS: 'Pagos_Talleres',
-  TELAS: 'Telas',
-  COLORES: 'Colores',
   PROVEEDORES: 'Proveedores',
 }
 
@@ -72,7 +69,7 @@ function inicializarHojas() {
       columnas: [
         'id', 'codigo', 'fecha', 'proveedorId', 'proveedorNombre',
         'telaId', 'telaNombre', 'unidadCompra', 'precioUnitario',
-        'descuento', 'flete', 'iva', 'notaRemito', 'total', 'usada', 'lotes_json'
+        'flete', 'notaRemito', 'total', 'usada', 'lotes_json'
       ]
     },
     {
@@ -82,14 +79,6 @@ function inicializarHojas() {
     {
       nombre: SHEETS.PAGOS,
       columnas: ['id', 'fecha', 'tallerId', 'tallerNombre', 'corteId', 'corteCodigo', 'monto', 'tipo', 'concepto']
-    },
-    {
-      nombre: SHEETS.TELAS,
-      columnas: ['id', 'nombre', 'unidadCompra', 'equivKgAMetro']
-    },
-    {
-      nombre: SHEETS.COLORES,
-      columnas: ['id', 'nombre']
     },
     {
       nombre: SHEETS.PROVEEDORES,
@@ -188,8 +177,6 @@ function doGet(e) {
         compras: leerTabla(SHEETS.COMPRAS),
         talleres: leerTabla(SHEETS.TALLERES),
         pagos: leerTabla(SHEETS.PAGOS),
-        telas: leerTabla(SHEETS.TELAS),
-        colores: leerTabla(SHEETS.COLORES),
         proveedores: leerTabla(SHEETS.PROVEEDORES)
       }
     } else if (action === 'articulos') {

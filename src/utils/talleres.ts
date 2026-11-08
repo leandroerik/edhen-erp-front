@@ -76,8 +76,8 @@ export function colorTallerAsignado(
   return undefined
 }
 
-export function linkWhatsApp(telefono?: string, mensaje?: string): string {
-  const digitos = (telefono || '').replace(/\D/g, '')
+export function linkWhatsApp(telefono?: string | number, mensaje?: string): string {
+  const digitos = String(telefono ?? '').replace(/\D/g, '')
   if (!digitos) return ''
   const texto = mensaje ? `?text=${encodeURIComponent(mensaje)}` : ''
   return `https://wa.me/${digitos}${texto}`

@@ -383,7 +383,7 @@ export function ArticuloDetalleModal({ articulo, onClose, onEdit, onDelete }: Pr
                     telas.map((t, idx) => (
                       <tr key={idx} className="hover:bg-stone-50">
                         <td className={td}>
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
                             <span className="font-medium text-stone-900">{t.telaNombre}</span>
                             {t.compraCodigo && (
                               <span className="rounded bg-stone-100 px-1 py-0.2 text-[10px] text-stone-500">
@@ -404,7 +404,8 @@ export function ArticuloDetalleModal({ articulo, onClose, onEdit, onDelete }: Pr
                         </td>
                         <td className={tdRight}>{formatRollos(t.rollosUsados)}</td>
                         <td className={tdRight}>
-                          {Number(t.cantidadUsar || 0).toFixed(1)} {t.unidad === 'METRO' ? 'm' : 'kg'}
+                          {Number(t.cantidadUsar || 0).toFixed(1)}{' '}
+                          {t.unidad === 'METRO' ? 'm' : 'kg'}
                         </td>
                         <td className={tdRight}>
                           <Money value={t.precioUnitario} />

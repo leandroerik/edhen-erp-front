@@ -21,7 +21,10 @@ interface Props {
 }
 
 function iniciales(nombre: string) {
-  const partes = nombre.trim().split(/\s+/).filter(Boolean)
+  const partes = String(nombre ?? '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
   const primera = partes[0]?.charAt(0) ?? ''
   const segunda = partes[1]?.charAt(0) ?? ''
   return `${primera}${segunda}`.toUpperCase() || '?'
@@ -40,7 +43,7 @@ export function TallerDetalleModal({
   onDelete,
 }: Props) {
   const precios = Object.entries(taller.precioPorPrendaPorModelo || {})
-  const telefonoDigitos = taller.telefono.replace(/\D/g, '')
+  const telefonoDigitos = String(taller.telefono ?? '').replace(/\D/g, '')
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4">
@@ -59,9 +62,16 @@ export function TallerDetalleModal({
               {iniciales(taller.nombre)}
             </div>
             <div className="min-w-0">
-              <h2 className="truncate text-base font-semibold text-stone-900 sm:text-lg">
-                {taller.nombre}
-              </h2>
+              <div className="flex min-w-0 items-center gap-1.5">
+                <h2 className="min-w-0 truncate text-base font-semibold text-stone-900 sm:text-lg">
+                  {taller.nombre}
+                </h2>
+                {taller.activo === false && (
+                  <span className="shrink-0 rounded-full border border-stone-300 bg-stone-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-stone-500">
+                    Inactivo
+                  </span>
+                )}
+              </div>
               <p className="mt-0.5 text-xs text-stone-500">
                 {taller.especialidad || 'Sin especialidad'}
               </p>

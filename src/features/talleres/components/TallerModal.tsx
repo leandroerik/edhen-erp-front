@@ -16,11 +16,12 @@ const labelCls = 'mb-1 block text-xs font-medium text-stone-500'
 
 export function TallerModal({ taller, idSugerido, onClose, onSave }: Props) {
   const [nombre, setNombre] = useState(taller?.nombre ?? '')
-  const [telefono, setTelefono] = useState(taller?.telefono ?? '')
+  const [telefono, setTelefono] = useState(String(taller?.telefono ?? ''))
   const [especialidad, setEspecialidad] = useState(taller?.especialidad ?? '')
   const [direccion, setDireccion] = useState(taller?.direccion ?? '')
   const [nota, setNota] = useState(taller?.nota ?? '')
   const [color, setColor] = useState(taller?.color ?? COLOR_TALLER_DEFAULT)
+  const [activo, setActivo] = useState(taller?.activo ?? true)
 
   const nombreLimpio = nombre.trim()
   const puedeGuardar = nombreLimpio.length > 0
@@ -35,6 +36,7 @@ export function TallerModal({ taller, idSugerido, onClose, onSave }: Props) {
       especialidad: especialidad.trim() || undefined,
       nota: nota.trim() || undefined,
       color,
+      activo,
       precioPorPrendaPorModelo: taller?.precioPorPrendaPorModelo ?? {},
     })
     onClose()
@@ -96,6 +98,21 @@ export function TallerModal({ taller, idSugerido, onClose, onSave }: Props) {
               />
             </div>
           </div>
+
+          <label className="flex cursor-pointer items-start gap-2 rounded-md border border-stone-200 bg-stone-50 px-3 py-2">
+            <input
+              type="checkbox"
+              checked={activo}
+              onChange={(e) => setActivo(e.target.checked)}
+              className="mt-0.5 accent-amber-600"
+            />
+            <span>
+              <span className="block text-sm font-medium text-stone-800">Taller activo</span>
+              <span className="block text-[11px] text-stone-500">
+                Si lo desactivás, se conserva en el histórico pero no aparece por defecto.
+              </span>
+            </span>
+          </label>
 
           <div>
             <label className={labelCls}>Color del taller</label>

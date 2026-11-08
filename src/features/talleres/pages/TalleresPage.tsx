@@ -19,6 +19,7 @@ function iniciales(nombre: string) {
 export function TalleresPage() {
   const { talleres, cortes, pagos, articulos, saveTaller, deleteTaller } = useErpStore()
   const [busqueda, setBusqueda] = useState('')
+  const [mostrarInactivos, setMostrarInactivos] = useState(false)
   const [modalAbierto, setModalAbierto] = useState(false)
   const [editando, setEditando] = useState<Taller | null>(null)
   const [viendo, setViendo] = useState<Taller | null>(null)
@@ -62,15 +63,16 @@ export function TalleresPage() {
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase()
+    const base = mostrarInactivos ? talleres : talleres.filter((t) => t.activo !== false)
     const lista = q
-      ? talleres.filter((t) =>
+      ? base.filter((t) =>
           `${t.nombre} ${t.especialidad ?? ''} ${t.telefono} ${t.direccion ?? ''} ${t.nota ?? ''}`
             .toLowerCase()
             .includes(q),
         )
-      : talleres
+      : base
     return [...lista].sort((a, b) => a.nombre.localeCompare(b.nombre))
-  }, [talleres, busqueda])
+  }, [talleres, busqueda, mostrarInactivos])
 
   const abrirNuevo = () => {
     setEditando(null)
@@ -144,9 +146,20 @@ export function TalleresPage() {
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
           />
-          <span className="text-xs text-stone-500">
-            {filtrados.length} de {talleres.length} talleres
-          </span>
+          <div className="flex items-center gap-3">
+            <label className="inline-flex items-center gap-1.5 text-xs font-medium text-stone-600">
+              <input
+                type="checkbox"
+                checked={mostrarInactivos}
+                onChange={(e) => setMostrarInactivos(e.target.checked)}
+                className="accent-amber-600"
+              />
+              Mostrar inactivos
+            </label>
+            <span className="text-xs text-stone-500">
+              {filtrados.length} de {talleres.length} talleres
+            </span>
+          </div>
         </div>
       )}
 
@@ -175,12 +188,15 @@ export function TalleresPage() {
             }
 
             const color = colorDeTaller(t.color)
+            const inactivo = t.activo === false
 
             return (
               <div
                 key={t.id}
                 onClick={() => abrirDetalle(t)}
-                className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-3.5 py-3 shadow-sm transition-colors hover:border-amber-300 hover:bg-amber-50/20 active:bg-stone-50"
+                className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-3.5 py-3 shadow-sm transition-colors hover:border-amber-300 hover:bg-amber-50/20 active:bg-stone-50 ${
+                  inactivo ? 'opacity-70' : ''
+                }`}
               >
                 <div className="flex min-w-0 items-center gap-2.5">
                   <div
@@ -194,7 +210,16 @@ export function TalleresPage() {
                     {iniciales(t.nombre)}
                   </div>
                   <div className="min-w-0">
-                    <h2 className="truncate text-sm font-semibold text-stone-900">{t.nombre}</h2>
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <h2 className="min-w-0 truncate text-sm font-semibold text-stone-900">
+                        {t.nombre}
+                      </h2>
+                      {inactivo && (
+                        <span className="shrink-0 rounded-full border border-stone-300 bg-stone-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-stone-500">
+                          Inactivo
+                        </span>
+                      )}
+                    </div>
                     <p className="mt-0.5 truncate text-[11px] text-stone-500">
                       {t.especialidad || 'Sin especialidad'} · {stats.activos} activos
                     </p>

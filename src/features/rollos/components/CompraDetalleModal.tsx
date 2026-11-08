@@ -1,8 +1,9 @@
+import { useState } from 'react'
 import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
 import { formatDate } from '../../../utils/format'
 import { formatCantidad, formatRollos, getStockInfo } from '../../../utils/stock'
-import { stockDesdeCompras, usosStockDesdeDatos } from '../../../data/mock'
+import { mockTelas, stockDesdeCompras, usosStockDesdeDatos } from '../../../data/mock'
 import { useErpStore } from '../../../data/erpStore'
 import type { Compra } from '../../../types'
 
@@ -60,8 +61,11 @@ function CompactStock({
   )
 }
 
-export function CompraDetalleModal({ compra, onClose }: Props) {
-  const { compras, encimadas, articulos } = useErpStore()
+export function CompraDetalleModal({ compra: compraInicial, onClose }: Props) {
+  const { compras, encimadas, articulos, updateCompra } = useErpStore()
+  const compra = compras.find((c) => c.id === compraInicial.id) ?? compraInicial
+  const [editandoTela, setEditandoTela] = useState(false)
+  const [telaEdit, setTelaEdit] = useState(compra.telaNombre)
   const usosStock = usosStockDesdeDatos(encimadas, articulos)
   const stockActual = stockDesdeCompras(compras, usosStock)
   const lotes = compra.lotes || []
@@ -70,9 +74,18 @@ export function CompraDetalleModal({ compra, onClose }: Props) {
   const unidad = compra.unidadCompra === 'METRO' ? 'm' : 'kg'
 
   const flete = Number(compra.flete) || 0
-  const descuento = Number(compra.descuento) || 0
-  const iva = Number(compra.iva) || 0
-  const tieneExtras = flete > 0 || descuento > 0 || iva > 0
+  const tieneExtras = flete > 0
+
+  const guardarTela = () => {
+    const nombre = telaEdit.trim()
+    if (!nombre) return
+    const telaObj = mockTelas.find(
+      (t) => t.nombre.toLowerCase() === nombre.toLowerCase(),
+    )
+    const telaId = telaObj?.id ?? `tel-${nombre.toLowerCase().replace(/\s+/g, '-')}`
+    updateCompra({ ...compra, telaNombre: nombre, telaId })
+    setEditandoTela(false)
+  }
 
   const detallePorLote = new Map(
     stockActual
@@ -103,13 +116,60 @@ export function CompraDetalleModal({ compra, onClose }: Props) {
         {/* Cabecera */}
         <div className="flex items-center justify-between border-b border-stone-200 px-5 py-3">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="rounded bg-amber-50 px-2 py-0.5 font-mono text-xs font-semibold text-amber-800">
                 {compra.codigo}
               </span>
-              <h2 className="text-lg font-semibold text-stone-900">
-                {compra.telaNombre}
-              </h2>
+              {editandoTela ? (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    list="telas-editar-compra"
+                    className="h-8 w-40 rounded border border-stone-300 bg-white px-2 text-sm text-stone-900 focus:border-amber-600 focus:outline-none"
+                    value={telaEdit}
+                    onChange={(e) => setTelaEdit(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') guardarTela()
+                      if (e.key === 'Escape') setEditandoTela(false)
+                    }}
+                    autoFocus
+                  />
+                  <datalist id="telas-editar-compra">
+                    {mockTelas.map((t) => (
+                      <option key={t.id} value={t.nombre} />
+                    ))}
+                  </datalist>
+                  <button
+                    type="button"
+                    onClick={guardarTela}
+                    className="rounded bg-amber-700 px-2 py-1 text-xs font-medium text-white hover:bg-amber-800"
+                  >
+                    Guardar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditandoTela(false)}
+                    className="rounded border border-stone-300 px-2 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <h2 className="text-lg font-semibold text-stone-900">
+                    {compra.telaNombre}
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTelaEdit(compra.telaNombre)
+                      setEditandoTela(true)
+                    }}
+                    className="rounded border border-stone-300 px-2 py-0.5 text-[11px] font-medium text-stone-600 hover:bg-stone-100"
+                  >
+                    Editar tela
+                  </button>
+                </div>
+              )}
             </div>
             <p className="mt-0.5 text-xs text-stone-500">
               {compra.proveedorNombre} · {formatDate(compra.fecha)}
@@ -215,23 +275,7 @@ export function CompraDetalleModal({ compra, onClose }: Props) {
                     <div>Total final</div>
                     {tieneExtras ? (
                       <div className="mt-0.5 text-[10px] font-normal text-stone-600">
-                        {flete > 0 ? (
-                          <>
-                            Incluye flete <Money value={flete} />
-                          </>
-                        ) : null}
-                        {descuento > 0 ? (
-                          <>
-                            {flete > 0 ? ' · ' : null}
-                            Desc. -<Money value={descuento} />
-                          </>
-                        ) : null}
-                        {iva > 0 ? (
-                          <>
-                            {flete > 0 || descuento > 0 ? ' · ' : null}
-                            IVA <Money value={iva} />
-                          </>
-                        ) : null}
+                        Incluye flete <Money value={flete} />
                       </div>
                     ) : null}
                   </td>

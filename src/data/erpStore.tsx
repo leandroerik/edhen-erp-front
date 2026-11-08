@@ -103,6 +103,7 @@ interface ErpStore {
   talleres: Taller[]
   proveedores: Proveedor[]
   addCompra: (compra: Compra) => void
+  updateCompra: (compra: Compra) => void
   addProveedor: (proveedor: Proveedor) => void
   saveTaller: (taller: Taller) => void
   deleteTaller: (tallerId: string) => void
@@ -688,6 +689,11 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
     postGasAction('guardarCompra', compra)
   }
 
+  const updateCompra = (compra: Compra) => {
+    setCompras((prev) => prev.map((c) => (c.id === compra.id ? compra : c)))
+    postGasAction('guardarCompra', compra)
+  }
+
   const addProveedor = (proveedor: Proveedor) => {
     const nombre = proveedor.nombre.trim()
     if (!nombre) return
@@ -965,6 +971,7 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
         talleres,
         proveedores,
         addCompra,
+        updateCompra,
         addProveedor,
         saveTaller,
         deleteTaller,
