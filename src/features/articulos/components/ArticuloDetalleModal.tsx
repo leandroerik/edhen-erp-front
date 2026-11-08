@@ -1,5 +1,6 @@
 import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
+import { TallerTag } from '../../../shared/components/TallerTag'
 import { useErpStore } from '../../../data/erpStore'
 import { formatARS } from '../../../utils/format'
 import { formatRollos } from '../../../utils/stock'
@@ -225,9 +226,11 @@ export function ArticuloDetalleModal({ articulo, onClose, onEdit, onDelete }: Pr
                 <div className="min-w-0">
                   <div className="text-xs text-stone-600">Taller y mano de obra</div>
                   {articulo.tallerNombre && (
-                    <div className="mt-0.5 inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
-                      {articulo.tallerNombre}
-                    </div>
+                    <TallerTag
+                      tallerId={articulo.tallerId}
+                      tallerNombre={articulo.tallerNombre}
+                      className="mt-0.5"
+                    />
                   )}
                 </div>
                 <div className="shrink-0 text-right">
@@ -277,8 +280,11 @@ export function ArticuloDetalleModal({ articulo, onClose, onEdit, onDelete }: Pr
                 <div className="mt-1 text-xs text-stone-500">
                   {formatARS(manoObraPrenda)} por prenda
                   {articulo.tallerNombre && (
-                    <span className="block mt-0.5 font-medium text-amber-800">
-                      {articulo.tallerNombre}
+                    <span className="mt-0.5 block">
+                      <TallerTag
+                        tallerId={articulo.tallerId}
+                        tallerNombre={articulo.tallerNombre}
+                      />
                     </span>
                   )}
                 </div>

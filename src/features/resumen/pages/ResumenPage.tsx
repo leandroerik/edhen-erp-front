@@ -202,6 +202,34 @@ export function ResumenPage() {
     }, 0)
   }, [cortes, pagos])
 
+  // Productos: últimos cargados primero (mayor código al inicio)
+  const productosResumen = useMemo(() => {
+    const numeroCodigo = (codigo: string) => {
+      const match = /(\d+)\s*$/.exec(codigo || '')
+      return match ? Number(match[1]) : 0
+    }
+
+    return [...articulos]
+      .sort((a, b) => numeroCodigo(b.codigoArticulo) - numeroCodigo(a.codigoArticulo))
+      .map((art) => {
+        const cantidad = Number(art.cantidadPrendas) || 0
+        const precioVenta = Number(art.precioVenta) || 0
+        const costoUnitario = Number(art.costoUnitario) || 0
+        const gananciaTotal =
+          Number(art.gananciaTotal) ||
+          (Number(art.gananciaUnitaria) || precioVenta - costoUnitario) * cantidad
+
+        return { ...art, cantidad, precioVenta, gananciaTotal }
+      })
+  }, [articulos])
+
+  const totalPrendas = useMemo(
+    () => productosResumen.reduce((acc, p) => acc + p.cantidad, 0),
+    [productosResumen],
+  )
+
+  const [productosAbiertos, setProductosAbiertos] = useState(true)
+
   // Filtros tabla de stock por tela
   const [busqueda, setBusqueda] = useState('')
   const [soloBajoStock, setSoloBajoStock] = useState(false)
@@ -363,30 +391,6 @@ export function ResumenPage() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Link
-            to="/cortes"
-            className="inline-flex items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-50"
-          >
-            <span>Cortes</span>
-            {cortesEnTaller > 0 && (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-                {cortesEnTaller} en taller
-              </span>
-            )}
-          </Link>
-          <Link
-            to="/pagos"
-            className="inline-flex items-center justify-center gap-2 rounded-md bg-amber-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-800"
-          >
-            <span>Pagos</span>
-            {totalAPagarTalleres > 0 && (
-              <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-semibold text-white">
-                Saldo <Money value={totalAPagarTalleres} />
-              </span>
-            )}
-          </Link>
-        </div>
       </div>
 
       {/* Tarjetas KPI */}
@@ -461,6 +465,113 @@ export function ResumenPage() {
           </div>
           <div className="mt-0.5 text-[10px] text-stone-400">Guardado automático</div>
         </div>
+      </div>
+
+      {/* Productos: cantidad y precios (desplegable) */}
+      <div className="rounded-xl border border-stone-200 bg-white shadow-sm">
+        <button
+          type="button"
+          onClick={() => setProductosAbiertos((abierto) => !abierto)}
+          className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left sm:px-5"
+        >
+          <div>
+            <h2 className="text-base font-semibold text-stone-900">Productos</h2>
+            <p className="mt-0.5 text-xs text-stone-500">
+              Últimos cargados primero · cantidad, precio de venta y ganancia.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2 text-xs">
+            <span className="rounded-full bg-stone-100 px-2 py-0.5 font-semibold text-stone-700">
+              {totalPrendas} prendas
+            </span>
+            <span className="font-medium text-amber-700">
+              {productosAbiertos ? 'Ocultar' : 'Ver'}
+            </span>
+          </div>
+        </button>
+
+        {productosAbiertos && (
+          <>
+            {/* Mobile: tarjetas por producto (scroll vertical) */}
+            <div className="max-h-[520px] space-y-3 overflow-y-auto border-t border-stone-100 p-3 md:hidden">
+              {productosResumen.length === 0 ? (
+                <div className="py-8 text-center text-sm text-stone-400">
+                  Todavía no hay productos generados.
+                </div>
+              ) : (
+                productosResumen.map((p) => (
+                  <div
+                    key={p.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-stone-200 p-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-stone-900">
+                        {p.nombre}
+                      </div>
+                      <div className="text-[11px] text-stone-500">
+                        {p.codigoArticulo} · {p.cantidad} u.
+                      </div>
+                      <div className="mt-0.5 text-[11px] text-emerald-700">
+                        Ganancia <Money value={p.gananciaTotal} />
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className="text-sm font-semibold text-stone-900">
+                        <Money value={p.precioVenta} />
+                      </div>
+                      <div className="text-[10px] text-stone-400">precio venta</div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Escritorio: tabla simple con scroll vertical */}
+            <div className="hidden max-h-[520px] overflow-auto border-t border-stone-100 md:block">
+              <table className="w-full divide-y divide-stone-200">
+                <thead className="sticky top-0 z-10 bg-stone-50 shadow-sm">
+                  <tr>
+                    <th className={`${th} text-left`}>Producto</th>
+                    <th className={thRight}>Cantidad</th>
+                    <th className={thRight}>Precio venta</th>
+                    <th className={thRight}>Ganancia</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {productosResumen.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-12 text-center text-sm text-stone-400">
+                        Todavía no hay productos generados.
+                      </td>
+                    </tr>
+                  ) : (
+                    productosResumen.map((p) => (
+                      <tr key={p.id} className="transition-colors hover:bg-stone-50/70">
+                        <td className={td}>
+                          <div className="font-medium text-stone-900">{p.nombre}</div>
+                          <div className="text-xs text-stone-500">{p.codigoArticulo}</div>
+                        </td>
+                        <td className={tdRight}>{p.cantidad}</td>
+                        <td className={`${tdRight} font-medium`}>
+                          <Money value={p.precioVenta} />
+                        </td>
+                        <td className={`${tdRight} font-semibold text-emerald-700`}>
+                          <Money value={p.gananciaTotal} />
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {productosResumen.length > 8 && (
+              <div className="border-t border-stone-100 px-4 py-2 text-center text-[11px] text-stone-400">
+                Desplazá para ver el resto de los productos
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* Gráfico: rentabilidad por tela */}

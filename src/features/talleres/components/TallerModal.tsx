@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button } from '../../../shared/components/Button'
+import { COLOR_TALLER_DEFAULT, PALETA_TALLER } from '../../../utils/talleres'
 import type { Taller } from '../../../types'
 
 interface Props {
@@ -19,6 +20,7 @@ export function TallerModal({ taller, idSugerido, onClose, onSave }: Props) {
   const [especialidad, setEspecialidad] = useState(taller?.especialidad ?? '')
   const [direccion, setDireccion] = useState(taller?.direccion ?? '')
   const [nota, setNota] = useState(taller?.nota ?? '')
+  const [color, setColor] = useState(taller?.color ?? COLOR_TALLER_DEFAULT)
 
   const nombreLimpio = nombre.trim()
   const puedeGuardar = nombreLimpio.length > 0
@@ -32,6 +34,7 @@ export function TallerModal({ taller, idSugerido, onClose, onSave }: Props) {
       direccion: direccion.trim() || undefined,
       especialidad: especialidad.trim() || undefined,
       nota: nota.trim() || undefined,
+      color,
       precioPorPrendaPorModelo: taller?.precioPorPrendaPorModelo ?? {},
     })
     onClose()
@@ -92,6 +95,40 @@ export function TallerModal({ taller, idSugerido, onClose, onSave }: Props) {
                 placeholder="Camisas, pantalones..."
               />
             </div>
+          </div>
+
+          <div>
+            <label className={labelCls}>Color del taller</label>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {PALETA_TALLER.map((opcion) => {
+                const activo = color.toLowerCase() === opcion.valor.toLowerCase()
+                return (
+                  <button
+                    key={opcion.valor}
+                    type="button"
+                    title={opcion.nombre}
+                    aria-label={opcion.nombre}
+                    onClick={() => setColor(opcion.valor)}
+                    className={`h-7 w-7 rounded-full border-2 transition-transform hover:scale-110 ${
+                      activo ? 'scale-110 border-stone-900' : 'border-white'
+                    }`}
+                    style={{ backgroundColor: opcion.valor }}
+                  />
+                )
+              })}
+              <label className="ml-1 inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-stone-300 bg-white px-2 text-[11px] font-medium text-stone-600">
+                <input
+                  type="color"
+                  value={color}
+                  onChange={(e) => setColor(e.target.value)}
+                  className="h-4 w-4 cursor-pointer border-0 bg-transparent p-0"
+                />
+                Otro
+              </label>
+            </div>
+            <p className="mt-1 text-[11px] text-stone-400">
+              Se usa para diferenciar el tag del taller en artículos y cortes.
+            </p>
           </div>
 
           <div>

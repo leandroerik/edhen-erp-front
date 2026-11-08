@@ -3,10 +3,18 @@ import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
 import { useErpStore } from '../../../data/erpStore'
 import { siguienteId } from '../../../utils/codigos'
+import { colorDeTaller, linkWhatsApp, rgba } from '../../../utils/talleres'
 import { resumenPagosPorTaller } from '../../pagos/pagos.utils'
 import type { Taller } from '../../../types'
 import { TallerModal } from '../components/TallerModal'
 import { TallerDetalleModal } from '../components/TallerDetalleModal'
+
+function iniciales(nombre: string) {
+  const partes = nombre.trim().split(/\s+/).filter(Boolean)
+  const primera = partes[0]?.charAt(0) ?? ''
+  const segunda = partes[1]?.charAt(0) ?? ''
+  return `${primera}${segunda}`.toUpperCase() || '?'
+}
 
 export function TalleresPage() {
   const { talleres, cortes, pagos, articulos, saveTaller, deleteTaller } = useErpStore()
@@ -166,27 +174,64 @@ export function TalleresPage() {
               saldo: 0,
             }
 
+            const color = colorDeTaller(t.color)
+
             return (
               <div
                 key={t.id}
                 onClick={() => abrirDetalle(t)}
                 className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-3.5 py-3 shadow-sm transition-colors hover:border-amber-300 hover:bg-amber-50/20 active:bg-stone-50"
               >
-                <div className="min-w-0">
-                  <h2 className="truncate text-sm font-semibold text-stone-900">{t.nombre}</h2>
-                  <p className="mt-0.5 truncate text-[11px] text-stone-500">
-                    {t.especialidad || 'Sin especialidad'} · {stats.activos} activos
-                  </p>
-                </div>
-                <div className="shrink-0 text-right">
+                <div className="flex min-w-0 items-center gap-2.5">
                   <div
-                    className={`text-sm font-semibold ${
-                      stats.saldo > 0 ? 'text-amber-800' : 'text-emerald-700'
-                    }`}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold"
+                    style={{
+                      backgroundColor: rgba(color, 0.12),
+                      borderColor: rgba(color, 0.35),
+                      color,
+                    }}
                   >
-                    <Money value={stats.saldo} />
+                    {iniciales(t.nombre)}
                   </div>
-                  <div className="text-[10px] text-stone-400">saldo</div>
+                  <div className="min-w-0">
+                    <h2 className="truncate text-sm font-semibold text-stone-900">{t.nombre}</h2>
+                    <p className="mt-0.5 truncate text-[11px] text-stone-500">
+                      {t.especialidad || 'Sin especialidad'} · {stats.activos} activos
+                    </p>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {t.telefono && (
+                    <button
+                      type="button"
+                      title={`Enviar WhatsApp a ${t.nombre}`}
+                      aria-label={`Enviar WhatsApp a ${t.nombre}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        window.open(linkWhatsApp(t.telefono), '_blank', 'noopener,noreferrer')
+                      }}
+                      className="flex h-8 w-8 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 transition-colors hover:bg-emerald-100"
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        aria-hidden="true"
+                        className="h-4 w-4"
+                      >
+                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                      </svg>
+                    </button>
+                  )}
+                  <div className="text-right">
+                    <div
+                      className={`text-sm font-semibold ${
+                        stats.saldo > 0 ? 'text-amber-800' : 'text-emerald-700'
+                      }`}
+                    >
+                      <Money value={stats.saldo} />
+                    </div>
+                    <div className="text-[10px] text-stone-400">saldo</div>
+                  </div>
                 </div>
               </div>
             )

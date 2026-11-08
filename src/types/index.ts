@@ -55,6 +55,7 @@ export interface Taller {
   direccion?: string
   especialidad?: string
   nota?: string
+  color?: string // color para identificar el taller en tags (hex)
   precioPorPrendaPorModelo: Record<string, number> // modeloId -> precio pactado
 }
 

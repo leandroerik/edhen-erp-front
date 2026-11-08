@@ -4,6 +4,7 @@ import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
 import { fechaISO, formatDate, hoyISO } from '../../../utils/format'
 import { siguienteCodigo } from '../../../utils/codigos'
+import { colorDeTaller, estiloTallerSeleccionado } from '../../../utils/talleres'
 import { ordenarPorFechaYCodigoDesc } from '../../../utils/orden'
 import { useErpStore } from '../../../data/erpStore'
 import type { Corte, EstadoCorte } from '../../../types'
@@ -223,6 +224,8 @@ export function CortesPage() {
             const cantidad = Number(c.cantidadPrendas) || 0
             const totalTaller = cantidad * (Number(c.precioPorPrenda) || 0)
             const sinTaller = !c.tallerId || c.tallerId === 'sin-taller'
+            const tallerActual = talleres.find((t) => t.id === c.tallerId)
+            const colorTaller = !sinTaller ? colorDeTaller(tallerActual?.color) : undefined
             const resumenPago = resumenPagoCorte(c, pagos)
             const atrasado = corteAtrasado(c, hoy)
             const enviadas = c.seguimiento?.enviadas ?? cantidad
@@ -293,6 +296,7 @@ export function CortesPage() {
                         ? 'border-amber-300 bg-amber-50 font-semibold text-amber-900'
                         : 'border-stone-300 bg-white text-stone-900'
                     }`}
+                    style={colorTaller ? estiloTallerSeleccionado(colorTaller) : undefined}
                   >
                     <option value="">-- Asignar taller --</option>
                     {talleres.map((t) => (
@@ -413,6 +417,10 @@ export function CortesPage() {
                 const cantidad = Number(c.cantidadPrendas) || 0
                 const totalTaller = cantidad * (Number(c.precioPorPrenda) || 0)
                 const sinTaller = !c.tallerId || c.tallerId === 'sin-taller'
+                const tallerActual = talleres.find((t) => t.id === c.tallerId)
+                const colorTaller = !sinTaller
+                  ? colorDeTaller(tallerActual?.color)
+                  : undefined
                 const resumenPago = resumenPagoCorte(c, pagos)
                 const atrasado = corteAtrasado(c, hoy)
                 const enviadas = c.seguimiento?.enviadas ?? cantidad
@@ -456,6 +464,7 @@ export function CortesPage() {
                             ? 'border-amber-300 bg-amber-50 font-semibold text-amber-900'
                             : 'border-stone-300 bg-white text-stone-900'
                         }`}
+                        style={colorTaller ? estiloTallerSeleccionado(colorTaller) : undefined}
                       >
                         <option value="">-- Asignar taller --</option>
                         {talleres.map((t) => (

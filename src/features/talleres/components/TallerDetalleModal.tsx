@@ -1,6 +1,7 @@
 import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
 import { mockModelos } from '../../../data/mock'
+import { colorDeTaller, linkWhatsApp, rgba } from '../../../utils/talleres'
 import type { Articulo, Taller } from '../../../types'
 
 interface Stats {
@@ -47,7 +48,14 @@ export function TallerDetalleModal({
         {/* Cabecera */}
         <div className="flex items-start justify-between gap-2 border-b border-stone-200 px-4 py-3 sm:px-6 sm:py-4">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-amber-200 bg-amber-50 text-sm font-semibold text-amber-800">
+            <div
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-sm font-semibold"
+              style={{
+                backgroundColor: rgba(colorDeTaller(taller.color), 0.12),
+                borderColor: rgba(colorDeTaller(taller.color), 0.35),
+                color: colorDeTaller(taller.color),
+              }}
+            >
               {iniciales(taller.nombre)}
             </div>
             <div className="min-w-0">
@@ -93,7 +101,10 @@ export function TallerDetalleModal({
                   size="sm"
                   onClick={() =>
                     window.open(
-                      `https://wa.me/${telefonoDigitos}`,
+                      linkWhatsApp(
+                        taller.telefono,
+                        `Hola ${taller.nombre}, te escribo de edhen.`,
+                      ),
                       '_blank',
                       'noopener,noreferrer',
                     )

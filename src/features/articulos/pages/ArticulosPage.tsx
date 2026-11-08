@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
 import { Pagination } from '../../../shared/components/Pagination'
+import { TallerTag } from '../../../shared/components/TallerTag'
 import { useErpStore } from '../../../data/erpStore'
 import { siguienteCodigo, siguienteId } from '../../../utils/codigos'
 import { ordenarPorCodigoDesc } from '../../../utils/orden'
@@ -211,7 +212,6 @@ export function ArticulosPage() {
             const nombre = a.nombre || a.descripcion || 'Artículo'
             const margen = Number(a.margenReal || 0)
             const cantidad = Number(a.cantidadPrendas) || 0
-            const sinTaller = !a.tallerId || a.tallerId === 'sin-taller'
 
             return (
               <div
@@ -227,15 +227,11 @@ export function ArticulosPage() {
                     <div className="truncate text-sm font-semibold text-stone-900">
                       {nombre}
                     </div>
-                    <span
-                      className={`mt-1 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${
-                        sinTaller
-                          ? 'border-stone-200 bg-stone-50 text-stone-500'
-                          : 'border-amber-200 bg-amber-50 text-amber-800'
-                      }`}
-                    >
-                      {sinTaller ? 'Sin asignar' : a.tallerNombre}
-                    </span>
+                    <TallerTag
+                      tallerId={a.tallerId}
+                      tallerNombre={a.tallerNombre}
+                      className="mt-1"
+                    />
                   </div>
                   <span
                     title="Rendimiento (margen sobre costo)"
@@ -335,7 +331,6 @@ export function ArticulosPage() {
                 const telasCount = a.telas?.length || 0
                 const cantidadPrendas = Number(a.cantidadPrendas) || 0
                 const ventaTotal = (Number(a.precioVenta) || 0) * cantidadPrendas
-                const sinTaller = !a.tallerId || a.tallerId === 'sin-taller'
 
                 return (
                   <tr
@@ -357,15 +352,7 @@ export function ArticulosPage() {
                             {telasCount} {telasCount === 1 ? 'tela' : 'telas'}
                           </span>
                         )}
-                        <span
-                          className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${
-                            sinTaller
-                              ? 'border-stone-200 bg-stone-50 text-stone-500'
-                              : 'border-amber-200 bg-amber-50 text-amber-800'
-                          }`}
-                        >
-                          {sinTaller ? 'Sin asignar' : a.tallerNombre}
-                        </span>
+                        <TallerTag tallerId={a.tallerId} tallerNombre={a.tallerNombre} />
                       </div>
                     </td>
                     <td className={`${tdRight} text-base font-bold text-stone-900`}>

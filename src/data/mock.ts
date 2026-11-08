@@ -271,6 +271,7 @@ export const mockTalleres: Taller[] = [
     telefono: '5491155551234',
     direccion: 'Av. Cabildo 1234',
     especialidad: 'Camisas',
+    color: '#2563eb',
     precioPorPrendaPorModelo: { 'mod-1': 4500 },
   },
   {
@@ -278,6 +279,7 @@ export const mockTalleres: Taller[] = [
     nombre: 'Taller Juan',
     telefono: '5491166664321',
     especialidad: 'Pantalones',
+    color: '#059669',
     precioPorPrendaPorModelo: { 'mod-2': 5200 },
   },
 ]
