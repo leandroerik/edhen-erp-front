@@ -1,19 +1,15 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { Money } from '../../../shared/components/Money'
 import { Pagination } from '../../../shared/components/Pagination'
-import { StockIndicator } from '../../../shared/components/StockIndicator'
-import {
-  formatCantidad,
-  formatRollos,
-  getStockInfo,
-  NIVEL_STOCK_BADGE,
-  NIVEL_STOCK_LABEL,
-  type NivelStock,
-} from '../../../utils/stock'
+import { formatCantidad, formatRollos, getStockInfo } from '../../../utils/stock'
 import { stockDesdeCompras, usosStockDesdeDatos } from '../../../data/mock'
 import { useErpStore } from '../../../data/erpStore'
 import { resumenPagoCorte } from '../../pagos/pagos.utils'
+import {
+  DisponibilidadTelaModal,
+  type ColorDisponible,
+} from '../components/DisponibilidadTelaModal'
 import type { UnidadTela } from '../../../types'
 
 const th = 'px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-stone-500'
@@ -23,11 +19,23 @@ const tdRight = `${td} text-right tabular-nums`
 
 const FILAS_POR_PAGINA = 8
 const DOLAR_STORAGE_KEY = 'edhen_erp_cotizacion_dolar'
+const KPI_STORAGE_KEY = 'edhen_erp_resumen_kpis_ocultos_v2'
+const KPI_IDS = ['invertido', 'stock', 'cortes', 'saldo', 'dolar'] as const
+type KpiId = (typeof KPI_IDS)[number]
+
+function esPantallaMobile() {
+  try {
+    return window.matchMedia('(max-width: 767px)').matches
+  } catch {
+    return false
+  }
+}
 
 interface StockGeneralTela {
   telaId: string
   telaNombre: string
   unidad: UnidadTela
+  orden: number
   compradoCantidad: number
   compradoRollos: number
   usadoCantidad: number
@@ -36,8 +44,29 @@ interface StockGeneralTela {
   disponibleRollos: number
   coloresCount: number
   coloresNombres: string[]
+  coloresDisponibles: ColorDisponible[]
   valorizadoPesos: number
   info: ReturnType<typeof getStockInfo>
+}
+
+function OcultarKpiButton({
+  label,
+  onClick,
+}: {
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={`Ocultar ${label}`}
+      aria-label={`Ocultar tarjeta ${label}`}
+      className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded text-[11px] leading-none text-stone-300 transition-colors hover:bg-stone-100 hover:text-stone-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+    >
+      ✕
+    </button>
+  )
 }
 
 // Generador de curvas Bezier suaves (smooth cardinal spline)
@@ -101,6 +130,39 @@ export function ResumenPage() {
     }
   }
 
+  // Tarjetas KPI ocultables (persistidas por navegador)
+  const [kpisOcultos, setKpisOcultos] = useState<KpiId[]>(() => {
+    try {
+      const guardado = localStorage.getItem(KPI_STORAGE_KEY)
+      if (guardado) {
+        const parsed: unknown = JSON.parse(guardado)
+        if (Array.isArray(parsed)) {
+          return parsed.filter((id): id is KpiId =>
+            (KPI_IDS as readonly string[]).includes(String(id)),
+          )
+        }
+      }
+    } catch {
+      // fallback
+    }
+    // En mobile arrancan ocultas para no ocupar espacio; en desktop visibles.
+    return esPantallaMobile() ? [...KPI_IDS] : []
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(KPI_STORAGE_KEY, JSON.stringify(kpisOcultos))
+    } catch (e) {
+      console.error('Error guardando tarjetas ocultas', e)
+    }
+  }, [kpisOcultos])
+
+  const ocultarKpi = (id: KpiId) =>
+    setKpisOcultos((prev) => (prev.includes(id) ? prev : [...prev, id]))
+
+  const kpiVisible = (id: KpiId) => !kpisOcultos.includes(id)
+  const algunKpiOculto = kpisOcultos.length > 0
+
   // Stock detallado y agregado
   const usosStock = useMemo(
     () => usosStockDesdeDatos(encimadas, articulos),
@@ -118,11 +180,13 @@ export function ResumenPage() {
       telaId: string
       telaNombre: string
       unidad: UnidadTela
+      orden: number
       compradoCantidad: number
       compradoRollos: number
       usadoCantidad: number
       usadoRollos: number
       colores: Set<string>
+      coloresDisponibles: Map<string, ColorDisponible>
       valorizadoPesos: number
     }>()
 
@@ -131,11 +195,14 @@ export function ResumenPage() {
         telaId: item.telaId,
         telaNombre: item.telaNombre,
         unidad: item.unidad,
+        // Orden de carga: respeta el orden en que aparecen las compras.
+        orden: mapa.size,
         compradoCantidad: 0,
         compradoRollos: 0,
         usadoCantidad: 0,
         usadoRollos: 0,
         colores: new Set<string>(),
+        coloresDisponibles: new Map<string, ColorDisponible>(),
         valorizadoPesos: 0,
       }
 
@@ -144,6 +211,16 @@ export function ResumenPage() {
       actual.usadoCantidad += item.usadoCantidad
       actual.usadoRollos += item.usadoRollos
       if (item.colorNombre) actual.colores.add(item.colorNombre)
+
+      const colorActual = actual.coloresDisponibles.get(item.colorId) ?? {
+        colorId: item.colorId,
+        colorNombre: item.colorNombre,
+        disponibleCantidad: 0,
+        disponibleRollos: 0,
+      }
+      colorActual.disponibleCantidad += Math.max(0, item.disponibleCantidad)
+      colorActual.disponibleRollos += Math.max(0, item.disponibleRollos)
+      actual.coloresDisponibles.set(item.colorId, colorActual)
 
       for (const lote of item.lotesDetalle) {
         const cantLoteRestante = Math.max(0, lote.cantidad - (lote.usadoCantidad || 0))
@@ -156,18 +233,28 @@ export function ResumenPage() {
     return Array.from(mapa.values()).map((t) => {
       const dispCant = Math.max(0, t.compradoCantidad - t.usadoCantidad)
       const dispRollos = Math.max(0, t.compradoRollos - t.usadoRollos)
+      const coloresDisponibles = Array.from(t.coloresDisponibles.values())
+        .filter((c) => c.disponibleCantidad > 0.005 || c.disponibleRollos > 0.005)
+        .sort(
+          (a, b) =>
+            b.disponibleRollos - a.disponibleRollos ||
+            a.colorNombre.localeCompare(b.colorNombre),
+        )
+
       return {
         telaId: t.telaId,
         telaNombre: t.telaNombre,
         unidad: t.unidad,
+        orden: t.orden,
         compradoCantidad: t.compradoCantidad,
         compradoRollos: t.compradoRollos,
         usadoCantidad: t.usadoCantidad,
         usadoRollos: t.usadoRollos,
         disponibleCantidad: dispCant,
         disponibleRollos: dispRollos,
-        coloresCount: t.colores.size,
+        coloresCount: coloresDisponibles.length,
         coloresNombres: Array.from(t.colores),
+        coloresDisponibles,
         valorizadoPesos: t.valorizadoPesos,
         info: getStockInfo(t.compradoCantidad, t.usadoCantidad),
       }
@@ -187,11 +274,6 @@ export function ResumenPage() {
 
   const cortesEnTaller = useMemo(
     () => cortes.filter((c) => c.estado === 'EN_TALLER').length,
-    [cortes],
-  )
-
-  const cortesAtrasados = useMemo(
-    () => cortes.filter((c) => c.atrasado || (c.estado === 'EN_TALLER' && c.fechaEntregaPrometida && new Date(c.fechaEntregaPrometida) < new Date())).length,
     [cortes],
   )
 
@@ -230,10 +312,9 @@ export function ResumenPage() {
 
   const [productosAbiertos, setProductosAbiertos] = useState(true)
 
-  // Filtros tabla de stock por tela
+  // Filtros de disponibilidad por tela
   const [busqueda, setBusqueda] = useState('')
-  const [soloBajoStock, setSoloBajoStock] = useState(false)
-  const [soloConStock, setSoloConStock] = useState(true)
+  const [ocultarAgotadas, setOcultarAgotadas] = useState(() => esPantallaMobile())
   const [paginaStock, setPaginaStock] = useState(1)
   const [filasStock, setFilasStock] = useState(FILAS_POR_PAGINA)
 
@@ -242,34 +323,25 @@ export function ResumenPage() {
   const stockFiltrado = useMemo(() => {
     return stockPorTela
       .filter((s) => {
-        if (soloConStock && s.disponibleCantidad <= 0) return false
-        if (soloBajoStock && s.info.nivel === 'OK') return false
+        if (ocultarAgotadas && s.info.nivel === 'AGOTADO') return false
         if (!texto) return true
         return s.telaNombre.toLowerCase().includes(texto) ||
           s.coloresNombres.some((c) => c.toLowerCase().includes(texto))
       })
       .sort((a, b) => {
-        // Mayor stock disponible primero
-        const diff = b.disponibleCantidad - a.disponibleCantidad
+        // Orden de carga descendente: lo último cargado aparece primero.
+        const diff = b.orden - a.orden
         if (diff !== 0) return diff
         return a.telaNombre.localeCompare(b.telaNombre)
       })
-  }, [stockPorTela, soloConStock, soloBajoStock, texto])
+  }, [stockPorTela, ocultarAgotadas, texto])
+
+  const [telaDetalle, setTelaDetalle] = useState<StockGeneralTela | null>(null)
 
   const totalPaginasStock = Math.max(1, Math.ceil(stockFiltrado.length / filasStock))
   const paginaStockActual = Math.min(Math.max(1, paginaStock), totalPaginasStock)
   const indiceStock = (paginaStockActual - 1) * filasStock
   const stockPaginado = stockFiltrado.slice(indiceStock, indiceStock + filasStock)
-
-  const resumenNiveles = useMemo(() => {
-    return stockPorTela.reduce<Record<NivelStock, number>>(
-      (acc, s) => {
-        acc[s.info.nivel] += 1
-        return acc
-      },
-      { AGOTADO: 0, CRITICO: 0, BAJO: 0, OK: 0 },
-    )
-  }, [stockPorTela])
 
   // -------------------------------------------------------------
   // ANÁLISIS POR TELA: VENTA, GANANCIA Y COSTO (Curvas suaves)
@@ -330,12 +402,16 @@ export function ResumenPage() {
     )
   }
 
-  const svgWidth = 840
-  const svgHeight = 280
-  const padLeft = 85
-  const padRight = 45
-  const padTop = 30
-  const padBottom = 65
+  const chartRef = useRef<HTMLDivElement>(null)
+  const [chartWidth, setChartWidth] = useState(840)
+
+  const esAngosto = chartWidth < 480
+  const svgWidth = chartWidth
+  const svgHeight = esAngosto ? 210 : 280
+  const padLeft = esAngosto ? 58 : 85
+  const padRight = esAngosto ? 14 : 45
+  const padTop = esAngosto ? 22 : 30
+  const padBottom = esAngosto ? 26 : 65
   const chartW = svgWidth - padLeft - padRight
   const chartH = svgHeight - padTop - padBottom
 
@@ -358,6 +434,19 @@ export function ResumenPage() {
       }
     })
   }, [telasAnalisis, maxGrafico, chartW, chartH])
+
+  useEffect(() => {
+    const el = chartRef.current
+    if (!el) return
+    const actualizar = () => {
+      const ancho = el.clientWidth
+      if (ancho > 0) setChartWidth(Math.max(300, Math.round(ancho)))
+    }
+    actualizar()
+    const observer = new ResizeObserver(actualizar)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [puntosTelas.length])
 
   const curvaVenta = useMemo(
     () => generarCurvaSuave(puntosTelas.map((p) => ({ x: p.x, y: p.yVenta }))),
@@ -383,22 +472,43 @@ export function ResumenPage() {
   return (
     <div className="space-y-6">
       {/* Cabecera */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h1 className="text-xl font-semibold text-stone-900 sm:text-2xl">Resumen</h1>
           <p className="mt-0.5 text-xs text-stone-500 sm:text-sm">
             Métricas clave de taller, rendimiento por tela y valorización de inventario.
           </p>
         </div>
-
+        <button
+          type="button"
+          onClick={() => setKpisOcultos(algunKpiOculto ? [] : [...KPI_IDS])}
+          aria-expanded={!algunKpiOculto}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-stone-300 bg-white px-3 py-1.5 text-xs font-medium text-stone-600 shadow-sm transition-colors hover:bg-stone-50"
+        >
+          <span aria-hidden="true">{algunKpiOculto ? '↺' : '▾'}</span>
+          {algunKpiOculto ? 'Mostrar tarjetas' : 'Ocultar tarjetas'}
+          {algunKpiOculto && (
+            <span className="rounded-full bg-stone-100 px-1.5 py-0.5 text-[10px] font-semibold text-stone-600">
+              {kpisOcultos.length}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Tarjetas KPI */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {/* Total Invertido */}
-        <div className="rounded-xl border border-t-2 border-stone-200 border-t-amber-600/70 bg-white p-3 shadow-sm sm:p-3.5">
-          <div className="text-xs font-medium text-stone-500">Total invertido</div>
-          <div className="mt-1 text-lg font-semibold text-stone-900">
+        <div
+          className={`relative rounded-xl border border-t-2 border-stone-200 border-t-amber-600/70 bg-white p-3 shadow-sm sm:p-3.5 ${
+            kpiVisible('invertido') ? '' : 'hidden'
+          }`}
+        >
+          <OcultarKpiButton
+            label="Total invertido"
+            onClick={() => ocultarKpi('invertido')}
+          />
+          <div className="pr-6 text-xs font-medium text-stone-500">Total invertido</div>
+          <div className="mt-1 text-base font-semibold tabular-nums text-stone-900 sm:text-lg">
             <Money value={totalInvertidoCompras} />
           </div>
           <div className="mt-0.5 text-xs text-stone-500">
@@ -407,9 +517,17 @@ export function ResumenPage() {
         </div>
 
         {/* Stock valorizado */}
-        <div className="rounded-xl border border-t-2 border-stone-200 border-t-emerald-600/70 bg-white p-3 shadow-sm sm:p-3.5">
-          <div className="text-xs font-medium text-stone-500">Stock valorizado</div>
-          <div className="mt-1 text-lg font-semibold text-stone-900">
+        <div
+          className={`relative rounded-xl border border-t-2 border-stone-200 border-t-emerald-600/70 bg-white p-3 shadow-sm sm:p-3.5 ${
+            kpiVisible('stock') ? '' : 'hidden'
+          }`}
+        >
+          <OcultarKpiButton
+            label="Stock valorizado"
+            onClick={() => ocultarKpi('stock')}
+          />
+          <div className="pr-6 text-xs font-medium text-stone-500">Stock valorizado</div>
+          <div className="mt-1 text-base font-semibold tabular-nums text-stone-900 sm:text-lg">
             <Money value={stockValorizadoTotal} />
           </div>
           <div className="mt-0.5 text-xs font-medium text-emerald-700">
@@ -418,8 +536,16 @@ export function ResumenPage() {
         </div>
 
         {/* Cortes en taller */}
-        <div className="rounded-xl border border-t-2 border-stone-200 border-t-stone-400/70 bg-white p-3 shadow-sm sm:p-3.5">
-          <div className="text-xs font-medium text-stone-500">Cortes en taller</div>
+        <div
+          className={`relative rounded-xl border border-t-2 border-stone-200 border-t-stone-400/70 bg-white p-3 shadow-sm sm:p-3.5 ${
+            kpiVisible('cortes') ? '' : 'hidden'
+          }`}
+        >
+          <OcultarKpiButton
+            label="Cortes en taller"
+            onClick={() => ocultarKpi('cortes')}
+          />
+          <div className="pr-6 text-xs font-medium text-stone-500">Cortes en taller</div>
           <div className="mt-1 flex items-baseline gap-2">
             <span className="text-lg font-semibold text-stone-900">{cortesEnTaller}</span>
             <span className="text-xs text-stone-500">activos</span>
@@ -429,19 +555,18 @@ export function ResumenPage() {
           </div>
         </div>
 
-        {/* Cortes atrasados */}
-        <div className="rounded-xl border border-t-2 border-stone-200 border-t-rose-500/70 bg-white p-3 shadow-sm sm:p-3.5">
-          <div className="text-xs font-medium text-stone-500">Cortes atrasados</div>
-          <div className="mt-1 text-lg font-semibold text-rose-600">{cortesAtrasados}</div>
-          <div className="mt-0.5 text-xs text-stone-500">
-            {cortesAtrasados > 0 ? 'Con demora' : 'Todo al día'}
-          </div>
-        </div>
-
         {/* Total a pagar talleres */}
-        <div className="rounded-xl border border-t-2 border-stone-200 border-t-amber-600/70 bg-white p-3 shadow-sm sm:p-3.5">
-          <div className="text-xs font-medium text-stone-500">Saldo a pagar</div>
-          <div className="mt-1 text-lg font-semibold text-stone-900">
+        <div
+          className={`relative rounded-xl border border-t-2 border-stone-200 border-t-amber-600/70 bg-white p-3 shadow-sm sm:p-3.5 ${
+            kpiVisible('saldo') ? '' : 'hidden'
+          }`}
+        >
+          <OcultarKpiButton
+            label="Saldo a pagar"
+            onClick={() => ocultarKpi('saldo')}
+          />
+          <div className="pr-6 text-xs font-medium text-stone-500">Saldo a pagar</div>
+          <div className="mt-1 text-base font-semibold tabular-nums text-stone-900 sm:text-lg">
             <Money value={totalAPagarTalleres} />
           </div>
           <div className="mt-0.5 text-xs text-stone-500">
@@ -450,8 +575,16 @@ export function ResumenPage() {
         </div>
 
         {/* Cotización Dólar Persistida */}
-        <div className="rounded-xl border border-t-2 border-stone-200 border-t-stone-400/70 bg-white p-3 shadow-sm sm:p-3.5">
-          <label className="block text-xs font-medium text-stone-500">Cotización USD</label>
+        <div
+          className={`relative col-span-2 rounded-xl border border-t-2 border-stone-200 border-t-stone-400/70 bg-white p-3 shadow-sm sm:col-span-1 sm:p-3.5 ${
+            kpiVisible('dolar') ? '' : 'hidden'
+          }`}
+        >
+          <OcultarKpiButton
+            label="Cotización USD"
+            onClick={() => ocultarKpi('dolar')}
+          />
+          <label className="block pr-6 text-xs font-medium text-stone-500">Cotización USD</label>
           <div className="mt-1 flex items-center gap-1.5">
             <span className="text-xs font-semibold text-stone-400">$</span>
             <input
@@ -574,6 +707,186 @@ export function ResumenPage() {
         )}
       </div>
 
+      {/* Disponibilidad de telas */}
+      <div className="space-y-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-stone-900">Disponibilidad de telas</h2>
+            <p className="mt-0.5 text-xs text-stone-500">
+              Stock disponible por tipo de tela, de mayor a menor.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              className="h-9 w-full rounded-md border border-stone-300 bg-white px-3 text-sm focus:border-amber-600 focus:outline-none sm:w-64"
+              placeholder="Buscar tela o color..."
+              value={busqueda}
+              onChange={(e) => {
+                setBusqueda(e.target.value)
+                setPaginaStock(1)
+              }}
+            />
+            <label className="inline-flex h-9 items-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-xs font-medium text-stone-700">
+              <input
+                type="checkbox"
+                checked={ocultarAgotadas}
+                onChange={(e) => {
+                  setOcultarAgotadas(e.target.checked)
+                  setPaginaStock(1)
+                }}
+                className="accent-amber-600"
+              />
+              Ocultar agotadas
+            </label>
+          </div>
+        </div>
+
+        {/* Vista Mobile: Tarjetas de disponibilidad */}
+        <div className="grid gap-2.5 sm:grid-cols-2 md:hidden">
+          {stockPaginado.length === 0 ? (
+            <div className="rounded-xl border border-stone-200 bg-white p-6 text-center text-sm text-stone-400 sm:col-span-2">
+              No se encontraron telas con los filtros aplicados.
+            </div>
+          ) : (
+            stockPaginado.map((item) => {
+              const pct = Math.max(
+                0,
+                Math.min(100, Math.round(item.info.disponiblePct * 100)),
+              )
+              return (
+                <button
+                  type="button"
+                  key={item.telaId}
+                  onClick={() => setTelaDetalle(item)}
+                  className="rounded-xl border border-stone-200 bg-white p-3.5 text-left shadow-sm transition-colors hover:border-amber-300 hover:bg-amber-50/20 active:bg-stone-50"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-stone-900">
+                        {item.telaNombre}
+                      </div>
+                      <div className="mt-1 text-base font-semibold tabular-nums text-stone-900 sm:text-lg">
+                        {formatCantidad(item.disponibleCantidad, item.unidad)}
+                      </div>
+                    </div>
+                    <span
+                      className={`inline-flex shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${item.info.badgeClass}`}
+                    >
+                      {item.info.label}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 flex items-center justify-between text-[11px] text-stone-500">
+                    <span className="font-medium text-stone-600">
+                      {formatRollos(item.disponibleRollos)}{' '}
+                      {item.disponibleRollos === 1 ? 'rollo' : 'rollos'}
+                    </span>
+                    <span className="font-semibold tabular-nums text-stone-600">{pct}%</span>
+                  </div>
+                  <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-stone-200">
+                    <div
+                      className={`h-full rounded-full ${item.info.barClass}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-[11px] text-stone-400">
+                    <span>
+                      {item.coloresCount}{' '}
+                      {item.coloresCount === 1 ? 'color con stock' : 'colores con stock'}
+                    </span>
+                    <span className="font-medium text-amber-700">Ver colores →</span>
+                  </div>
+                </button>
+              )
+            })
+          )}
+        </div>
+
+        {/* Vista Escritorio: Tabla de disponibilidad */}
+        <div className="hidden overflow-x-auto rounded-xl border border-stone-200 bg-white shadow-sm md:block">
+          <table className="w-full divide-y divide-stone-200">
+            <thead className="bg-stone-50">
+              <tr>
+                <th className={`${th} text-left`}>Tela</th>
+                <th className={`${th} text-left`}>Estado</th>
+                <th className={thRight}>Disponible</th>
+                <th className={thRight}>Rollos disp.</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-stone-100">
+              {stockPaginado.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-12 text-center text-sm text-stone-400">
+                    No se encontraron telas con los filtros aplicados.
+                  </td>
+                </tr>
+              ) : (
+                stockPaginado.map((item) => {
+                  const pct = Math.max(
+                    0,
+                    Math.min(100, Math.round(item.info.disponiblePct * 100)),
+                  )
+                  return (
+                    <tr
+                      key={item.telaId}
+                      onClick={() => setTelaDetalle(item)}
+                      title="Ver colores y rollos"
+                      className="cursor-pointer hover:bg-stone-50/70 transition-colors"
+                    >
+                      <td className={`${td} font-medium text-stone-900`}>
+                        <div>{item.telaNombre}</div>
+                        <div className="text-[11px] font-normal text-stone-400">
+                          {item.coloresCount}{' '}
+                          {item.coloresCount === 1 ? 'color con stock' : 'colores con stock'}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${item.info.badgeClass}`}
+                          >
+                            {item.info.label}
+                          </span>
+                          <div className="h-1.5 w-16 overflow-hidden rounded-full bg-stone-200">
+                            <div
+                              className={`h-full rounded-full ${item.info.barClass}`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <span className="text-[11px] font-medium tabular-nums text-stone-500">
+                            {pct}%
+                          </span>
+                        </div>
+                      </td>
+                      <td className={`${tdRight} font-semibold`}>
+                        {formatCantidad(item.disponibleCantidad, item.unidad)}
+                      </td>
+                      <td className={tdRight}>
+                        {formatRollos(item.disponibleRollos)}
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="mt-2">
+          <Pagination
+            page={paginaStockActual}
+            pageSize={filasStock}
+            totalItems={stockFiltrado.length}
+            onPageChange={setPaginaStock}
+            onPageSizeChange={(size) => {
+              setFilasStock(size)
+              setPaginaStock(1)
+            }}
+            itemLabel="telas"
+          />
+        </div>
+      </div>
+
       {/* Gráfico: rentabilidad por tela */}
       <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
         <div className="flex flex-col gap-3 border-b border-stone-100 pb-3.5 sm:flex-row sm:items-center sm:justify-between">
@@ -609,10 +922,10 @@ export function ResumenPage() {
           </div>
         ) : (
           <div className="mt-4">
-            <div className="overflow-x-auto pb-2">
+            <div ref={chartRef} className="w-full">
               <svg
                 viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-                className="w-full min-w-[680px] h-auto overflow-visible select-none"
+                className="h-auto w-full select-none overflow-visible"
               >
                 <defs>
                   {/* Degradé suave para el área bajo la ganancia */}
@@ -759,7 +1072,7 @@ export function ResumenPage() {
 
                       {/* Tooltip flotante superior directo en el gráfico al hacer hover */}
                       {isHovered && (
-                        <g transform={`translate(${p.x}, ${Math.max(16, p.yGanancia - 12)})`}>
+                        <g transform={`translate(${p.x}, ${Math.max(20, p.yGanancia - 12)})`}>
                           <rect
                             x={-45}
                             y={-18}
@@ -894,217 +1207,16 @@ export function ResumenPage() {
         )}
       </div>
 
-      {/* Stock general por tela */}
-      <div className="space-y-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className="text-base font-semibold text-stone-900">Stock General por Tela</h2>
-            <p className="mt-0.5 text-xs text-stone-500">
-              Vista consolidada por tipo de tela, ordenada de mayor a menor stock disponible.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              className="h-9 w-full rounded-md border border-stone-300 bg-white px-3 text-sm focus:border-amber-600 focus:outline-none sm:w-64"
-              placeholder="Buscar tela o color..."
-              value={busqueda}
-              onChange={(e) => {
-                setBusqueda(e.target.value)
-                setPaginaStock(1)
-              }}
-            />
-            <label className="inline-flex h-9 items-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-xs font-medium text-stone-700">
-              <input
-                type="checkbox"
-                checked={soloConStock}
-                onChange={(e) => {
-                  setSoloConStock(e.target.checked)
-                  setPaginaStock(1)
-                }}
-                className="accent-amber-600"
-              />
-              Solo con stock
-            </label>
-            <label className="inline-flex h-9 items-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-xs font-medium text-stone-700">
-              <input
-                type="checkbox"
-                checked={soloBajoStock}
-                onChange={(e) => {
-                  setSoloBajoStock(e.target.checked)
-                  setPaginaStock(1)
-                }}
-                className="accent-amber-600"
-              />
-              Solo bajo stock
-            </label>
-          </div>
-        </div>
-
-        {/* Resumen badges */}
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-stone-200 bg-white px-3.5 py-2.5 text-xs shadow-sm">
-          <span className="font-medium text-stone-700">Estado de telas:</span>
-          {(Object.keys(NIVEL_STOCK_LABEL) as NivelStock[]).map((nivel) => (
-            <span
-              key={nivel}
-              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-medium ${NIVEL_STOCK_BADGE[nivel]}`}
-            >
-              {NIVEL_STOCK_LABEL[nivel]}
-              <strong className="tabular-nums">{resumenNiveles[nivel]}</strong>
-            </span>
-          ))}
-          <span className="text-stone-400">
-            · <Link to="/rollos" className="text-amber-700 hover:underline">Ver detalle de rollos y compras →</Link>
-          </span>
-        </div>
-
-        {/* Vista Mobile: Tarjetas por tela */}
-        <div className="space-y-3 md:hidden">
-          {stockPaginado.length === 0 ? (
-            <div className="rounded-xl border border-stone-200 bg-white p-6 text-center text-sm text-stone-400">
-              No se encontraron telas con los filtros aplicados.
-            </div>
-          ) : (
-            stockPaginado.map((item) => (
-              <div
-                key={item.telaId}
-                className="rounded-xl border border-stone-200 bg-white p-3.5 shadow-sm"
-              >
-                <div className="flex items-start justify-between gap-2 border-b border-stone-100 pb-2">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-stone-900">
-                      {item.telaNombre}
-                    </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-stone-500">
-                      <span className="rounded bg-stone-100 px-1.5 py-0.5 text-[10px] font-medium text-stone-600">
-                        {item.coloresCount} {item.coloresCount === 1 ? 'color' : 'colores'}
-                      </span>
-                      <span className="truncate" title={item.coloresNombres.join(', ')}>
-                        {item.coloresNombres.slice(0, 3).join(', ')}
-                        {item.coloresNombres.length > 3 && ` +${item.coloresNombres.length - 3}`}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <div className="text-xs font-semibold text-stone-900">
-                      <Money value={item.valorizadoPesos} />
-                    </div>
-                    <div className="text-[10px] text-stone-400">valorizado</div>
-                  </div>
-                </div>
-
-                <div className="mt-2 grid grid-cols-3 gap-2 rounded-lg bg-stone-50 p-2 text-xs">
-                  <div>
-                    <span className="block text-[10px] text-stone-500">Comprado</span>
-                    <strong className="text-stone-900">
-                      {formatCantidad(item.compradoCantidad, item.unidad)}
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="block text-[10px] text-stone-500">Consumido</span>
-                    <strong className="text-stone-900">
-                      {formatCantidad(item.usadoCantidad, item.unidad)}
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="block text-[10px] text-stone-500">Rollos disp.</span>
-                    <strong className="text-stone-900">
-                      {formatRollos(item.disponibleRollos)}
-                    </strong>
-                  </div>
-                </div>
-
-                <div className="mt-2">
-                  <StockIndicator
-                    comprado={item.compradoCantidad}
-                    usado={item.usadoCantidad}
-                    unidad={item.unidad}
-                    detalle={false}
-                  />
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* Vista Escritorio: Tabla por tela */}
-        <div className="hidden overflow-x-auto rounded-xl border border-stone-200 bg-white shadow-sm md:block">
-          <table className="w-full divide-y divide-stone-200">
-            <thead className="bg-stone-50">
-              <tr>
-                <th className={`${th} text-left`}>Tela</th>
-                <th className={`${th} text-left`}>Colores activos</th>
-                <th className={thRight}>Comprado</th>
-                <th className={thRight}>Consumido</th>
-                <th className={`${th} text-left`}>Disponible</th>
-                <th className={thRight}>Rollos disp.</th>
-                <th className={thRight}>Valorizado</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-stone-100">
-              {stockPaginado.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-sm text-stone-400">
-                    No se encontraron telas con los filtros aplicados.
-                  </td>
-                </tr>
-              ) : (
-                stockPaginado.map((item) => (
-                  <tr key={item.telaId} className="hover:bg-stone-50/70 transition-colors">
-                    <td className={`${td} font-medium text-stone-900`}>
-                      {item.telaNombre}
-                    </td>
-                    <td className={td}>
-                      <div className="flex flex-wrap items-center gap-1.5 max-w-xs">
-                        <span className="rounded bg-stone-100 px-1.5 py-0.5 text-[10px] font-medium text-stone-600">
-                          {item.coloresCount} {item.coloresCount === 1 ? 'color' : 'colores'}
-                        </span>
-                        <span className="text-xs text-stone-500 truncate" title={item.coloresNombres.join(', ')}>
-                          {item.coloresNombres.slice(0, 3).join(', ')}
-                          {item.coloresNombres.length > 3 && ` +${item.coloresNombres.length - 3}`}
-                        </span>
-                      </div>
-                    </td>
-                    <td className={tdRight}>
-                      {formatCantidad(item.compradoCantidad, item.unidad)}
-                    </td>
-                    <td className={tdRight}>
-                      {formatCantidad(item.usadoCantidad, item.unidad)}
-                    </td>
-                    <td className={td}>
-                      <StockIndicator
-                        comprado={item.compradoCantidad}
-                        usado={item.usadoCantidad}
-                        unidad={item.unidad}
-                        detalle={false}
-                      />
-                    </td>
-                    <td className={`${tdRight} font-semibold text-stone-800`}>
-                      {formatRollos(item.disponibleRollos)}
-                    </td>
-                    <td className={`${tdRight} font-medium text-stone-900`}>
-                      <Money value={item.valorizadoPesos} />
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="mt-2">
-          <Pagination
-            page={paginaStockActual}
-            pageSize={filasStock}
-            totalItems={stockFiltrado.length}
-            onPageChange={setPaginaStock}
-            onPageSizeChange={(size) => {
-              setFilasStock(size)
-              setPaginaStock(1)
-            }}
-            itemLabel="telas"
-          />
-        </div>
-      </div>
+      {telaDetalle && (
+        <DisponibilidadTelaModal
+          telaNombre={telaDetalle.telaNombre}
+          unidad={telaDetalle.unidad}
+          disponibleCantidad={telaDetalle.disponibleCantidad}
+          disponibleRollos={telaDetalle.disponibleRollos}
+          colores={telaDetalle.coloresDisponibles}
+          onClose={() => setTelaDetalle(null)}
+        />
+      )}
     </div>
   )
 }
