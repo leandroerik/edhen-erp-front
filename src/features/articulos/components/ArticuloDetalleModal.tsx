@@ -1,9 +1,13 @@
+import { useNavigate } from 'react-router-dom'
 import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
 import { TallerTag } from '../../../shared/components/TallerTag'
+import { TelaTag } from '../../../shared/components/TelaTag'
 import { useErpStore } from '../../../data/erpStore'
 import { formatARS } from '../../../utils/format'
 import { formatRollos } from '../../../utils/stock'
+import { colorSwatchClass } from '../../../utils/colores'
+import { telasUnicas } from '../../../utils/telas'
 import type { Articulo } from '../../../types'
 
 interface Props {
@@ -13,36 +17,23 @@ interface Props {
   onDelete: () => void
 }
 
-const COLOR_SWATCH: Record<string, string> = {
-  Negro: 'bg-stone-900',
-  Blanco: 'bg-white',
-  Crudo: 'bg-amber-50',
-  Azul: 'bg-blue-600',
-  Beige: 'bg-amber-100',
-  Rojo: 'bg-red-600',
-  Verde: 'bg-emerald-600',
-  Gris: 'bg-stone-400',
-  Camel: 'bg-amber-700',
-  Marino: 'bg-blue-900',
-  Rosa: 'bg-pink-300',
-  Celeste: 'bg-sky-300',
-  Terracota: 'bg-orange-700',
-}
-
 const th = 'px-3 py-2 text-xs font-semibold uppercase tracking-wide text-stone-500'
 const thRight = `${th} text-right`
 const td = 'px-3 py-2 text-sm text-stone-900'
 const tdRight = `${td} text-right tabular-nums`
 
 export function ArticuloDetalleModal({ articulo, onClose, onEdit, onDelete }: Props) {
+  const navigate = useNavigate()
   const { encimadas } = useErpStore()
   const cantidad = Math.max(1, Number(articulo.cantidadPrendas) || 0)
   const telas = articulo.telas || []
+  const telasResumen = telasUnicas(telas)
   const avios = articulo.avios || []
+  const descripcion = (articulo.descripcion || '').trim()
   const encimada = articulo.encimadaId
     ? encimadas.find((item) => item.id === articulo.encimadaId)
     : undefined
-  const encimadaItem = encimada?.items.find((item) => item.id === articulo.encimadaItemId)
+  const encimadaCodigo = encimada?.codigo || articulo.encimadaId
 
   // Telas
   const costoTelaTotal =
@@ -87,34 +78,87 @@ export function ArticuloDetalleModal({ articulo, onClose, onEdit, onDelete }: Pr
   const margenReal =
     Number(articulo.margenReal) ||
     (costoUnitario > 0 ? (gananciaUnitaria / costoUnitario) * 100 : 0)
+  const margenTone =
+    margenReal >= 100
+      ? 'bg-emerald-100 text-emerald-800'
+      : margenReal >= 50
+        ? 'bg-stone-100 text-stone-700'
+        : 'bg-amber-100 text-amber-800'
+
+  const handleIrAEncimada = () => {
+    if (!articulo.encimadaId) return
+    onClose()
+    navigate(`/carga-capas?encimada=${encodeURIComponent(articulo.encimadaId)}`)
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/40 sm:items-center sm:p-4">
-      <div className="flex h-[100dvh] w-full max-w-3xl flex-col bg-white shadow-2xl sm:h-auto sm:max-h-[92vh] sm:rounded-xl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="articulo-detalle-titulo"
+        className="flex h-[100dvh] w-full max-w-3xl flex-col bg-white shadow-2xl sm:h-auto sm:max-h-[92vh] sm:rounded-xl"
+      >
         {/* Cabecera */}
         <div className="flex items-start justify-between gap-2 border-b border-stone-200 px-4 py-3 sm:items-center sm:px-6 sm:py-4">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-xs font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+              <span className="rounded border border-amber-200 bg-amber-50 px-2 py-0.5 font-mono text-xs font-semibold text-amber-800">
                 {articulo.codigoArticulo}
               </span>
-              <h2 className="truncate text-base font-semibold text-stone-900 sm:text-lg">
+              <h2
+                id="articulo-detalle-titulo"
+                className="truncate text-base font-semibold text-stone-900 sm:text-lg"
+              >
                 {articulo.nombre || 'Artículo sin nombre'}
               </h2>
+              <span
+                className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${margenTone}`}
+              >
+                {margenReal.toFixed(1)}% margen
+              </span>
             </div>
-            {articulo.descripcion && (
-              <p className="mt-0.5 text-xs text-stone-500">{articulo.descripcion}</p>
-            )}
-            {encimada && (
-              <p className="mt-1 text-xs text-stone-500">
-                Encimada: <strong className="text-stone-700">{encimada.codigo}</strong>
-                {encimadaItem && <span> · {encimadaItem.modeloNombre}</span>}
-              </p>
-            )}
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              {telasResumen.map((t) => (
+                <TelaTag
+                  key={t.key}
+                  telaNombre={t.telaNombre}
+                  compact
+                />
+              ))}
+              {articulo.tallerNombre && (
+                <TallerTag
+                  tallerId={articulo.tallerId}
+                  tallerNombre={articulo.tallerNombre}
+                />
+              )}
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-stone-500">
+              {articulo.encimadaId && (
+                <button
+                  type="button"
+                  onClick={handleIrAEncimada}
+                  className="font-semibold text-stone-600 underline-offset-2 transition-colors hover:text-stone-900 hover:underline"
+                >
+                  Encimada: {encimadaCodigo}
+                </button>
+              )}
+              {articulo.encimadaId && descripcion && (
+                <span className="text-stone-300">·</span>
+              )}
+              {descripcion && <span>{descripcion}</span>}
+              {(articulo.encimadaId || descripcion) && (
+                <span className="text-stone-300">·</span>
+              )}
+              <span className="text-[11px] text-stone-400">
+                {cantidad} {cantidad === 1 ? 'prenda' : 'prendas'}
+              </span>
+            </div>
           </div>
           <button
             type="button"
             onClick={onClose}
+            aria-label="Cerrar"
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-stone-400 hover:bg-stone-100 hover:text-stone-700"
           >
             ✕
@@ -206,9 +250,17 @@ export function ArticuloDetalleModal({ articulo, onClose, onEdit, onDelete }: Pr
 
           {/* 2. Desglose de Costos */}
           <div>
-            <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-              Composición del costo
-            </span>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                Composición del costo
+              </span>
+              <span className="text-xs text-stone-500">
+                Total{' '}
+                <strong className="text-stone-900">
+                  <Money value={costoTotalProduccion} />
+                </strong>
+              </span>
+            </div>
             {/* Mobile: composición compacta */}
             <div className="mt-2 divide-y divide-stone-100 rounded-xl border border-stone-200 bg-white px-3.5 shadow-sm sm:hidden">
               <div className="flex items-baseline justify-between gap-3 py-2.5">
@@ -333,9 +385,9 @@ export function ArticuloDetalleModal({ articulo, onClose, onEdit, onDelete }: Pr
                         <div className="truncate font-medium text-stone-900">{t.telaNombre}</div>
                         <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-stone-500">
                           <span
-                            className={`h-2 w-2 shrink-0 rounded-full border border-stone-300 ${
-                              COLOR_SWATCH[t.colorNombre] ?? 'bg-stone-200'
-                            }`}
+                            className={`h-2 w-2 shrink-0 rounded-full border border-stone-300 ${colorSwatchClass(
+                              t.colorNombre,
+                            )}`}
                           />
                           {t.colorNombre}
                           {t.compraCodigo && (
@@ -395,9 +447,9 @@ export function ArticuloDetalleModal({ articulo, onClose, onEdit, onDelete }: Pr
                         <td className={td}>
                           <div className="flex items-center gap-1.5">
                             <span
-                              className={`h-2.5 w-2.5 shrink-0 rounded-full border border-stone-300 ${
-                                COLOR_SWATCH[t.colorNombre] ?? 'bg-stone-200'
-                              }`}
+                              className={`h-2.5 w-2.5 shrink-0 rounded-full border border-stone-300 ${colorSwatchClass(
+                                t.colorNombre,
+                              )}`}
                             />
                             <span className="text-stone-600">{t.colorNombre}</span>
                           </div>

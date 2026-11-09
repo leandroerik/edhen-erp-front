@@ -17,9 +17,9 @@ npm run build          # tsc -b && vite build (succeeds; warns about a >500 kB c
 npm run lint           # always fails today, see below
 ```
 
-- `npm run lint` exits 1 before linting: `eslint.config.js:15` passes
-  `reactHooks.configs['recommended-latest']` (legacy format) into ESLint 10 flat config. Verify
-  changes with `npx tsc -b`; fixing lint is a separate change.
+- `npm run lint` fails before linting (exit 2): `eslint.config.js:15` passes
+  `reactHooks.configs['recommended-latest']` (legacy array-style `plugins`) into ESLint 10 flat
+  config. Verify changes with `npx tsc -b`; fixing lint is a separate change.
 - There is no test runner, test script, or test file. CI uses Node 22.
 - Push to `main` deploys via `.github/workflows/deploy.yml` (`npm ci` + `npm run build` with the
   `VITE_API_URL` repo variable, copies `index.html` to `404.html`, deploys Pages). `npm run deploy`
@@ -48,13 +48,18 @@ npm run lint           # always fails today, see below
 - GAS URL resolution: localStorage `edhen_erp_gas_url` → `VITE_API_URL` → hardcoded
   `DEFAULT_GAS_URL` in `gasClient.ts`. Ajustes can override it per browser.
 - Ajustes backup/restore, "limpiar todo", and "restablecer demo" only change local state +
-  localStorage; they do **not** write to Sheets. A later sync or reload re-imports Sheet data.
+  localStorage; they do **not** write to Sheets (restore can still trigger the auto-Corte effect
+  below). A later sync or reload re-imports Sheet data.
 - Fabric/color/model catalogs are hardcoded in `src/data/mock.ts` (`mockTelas`, `mockColores`,
-  `mockModelos`) and rendered as form selects. Sheets' `Telas`/`Colores` tabs are read but ignored
-  by the store; adding a new tela/color/modelo requires editing code.
+  `mockModelos`) and rendered as form selects. The Sheets backend has no catalog tabs (only
+  Articulos, Cortes, Encimadas, Compras, Talleres, Pagos_Talleres, Proveedores), so adding a
+  tela/color/modelo requires editing code.
 - Styling is Tailwind v4 through `@tailwindcss/vite`; global CSS is `src/index.css`
   (`@import "tailwindcss"`). There is no `tailwind.config.js`. UI copy is Spanish; reuse
   `formatARS` for money and `fechaISO`/`toISODate` for dates.
+- Shared helpers live in `src/utils/` (`format`, `stock`, `codigos`, `orden`, `talleres`).
+  `features/pagos/pagos.utils.ts` derives payment balances/estados; `features/articulos/stockRollos.ts`
+  builds roll options and falls back to `mockStock` when there are no compras.
 
 ## Google Sheets backend (manual deploy)
 
@@ -81,8 +86,9 @@ npm run lint           # always fails today, see below
   `encimadaItemId`) and pushes them to Sheets; deleting an encimada renumbers the rest.
 - `erpStore` renumbers `ART-`/`ENC-` codes consecutively on delete/sync
   (`normalizarCodigos` + `renumerarConsecutivos`) and repairs descriptions like
-  `Encimada ENC-…`. It also auto-creates a `Corte` for an article with `tallerId` but no
-  `corteId`. These are deliberate.
+  `Encimada ENC-…`. `addArticulo` itself creates a matching `Corte`, and an effect also auto-creates
+  one for an article with `tallerId` but no `corteId`; that effect fires after `hidratarDatos` too,
+  so even a "local-only" backup restore can POST generated cortes to Sheets. These are deliberate.
 - `deletePagoTaller` removes the payment only locally — there is no GAS delete action for pagos.
 - Dates are stored as `YYYY-MM-DD` (`fechaISO`, `toISODate`), not UTC ISO strings. Sheets returns
   full ISO timestamps; `toISOString()` shifts the day and breaks `<input type="date">`.

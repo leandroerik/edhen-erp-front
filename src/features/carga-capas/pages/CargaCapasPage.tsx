@@ -1,8 +1,10 @@
-import { useState, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Button } from '../../../shared/components/Button'
 import { formatDate } from '../../../utils/format'
 import { siguienteCodigo, siguienteId } from '../../../utils/codigos'
 import { ordenarPorFechaYCodigoDesc } from '../../../utils/orden'
+import { telasUnicas } from '../../../utils/telas'
 import { useErpStore } from '../../../data/erpStore'
 import type { Encimada } from '../../../types'
 import { EncimadaModal } from '../components/EncimadaModal'
@@ -19,8 +21,15 @@ function totales(encimada: Encimada) {
   return { capas, prendas }
 }
 
+function telasDeEncimada(encimada: Encimada) {
+  const fuente = encimada.telasUsadas.length > 0 ? encimada.telasUsadas : encimada.cargas
+  return telasUnicas(fuente)
+}
+
 export function CargaCapasPage() {
   const { encimadas, articulos, saveEncimada, deleteEncimada } = useErpStore()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const encimadaParam = searchParams.get('encimada')
   const [open, setOpen] = useState(false)
   const [viewing, setViewing] = useState<Encimada | null>(null)
   const [editing, setEditing] = useState<Encimada | null>(null)
@@ -39,6 +48,22 @@ export function CargaCapasPage() {
     [encimadas],
   )
 
+  useEffect(() => {
+    if (!encimadaParam) return
+    const encimada = encimadas.find(
+      (item) => item.id === encimadaParam || item.codigo === encimadaParam,
+    )
+    if (encimada) setViewing(encimada)
+  }, [encimadaParam, encimadas])
+
+  const cerrarDetalle = () => {
+    setViewing(null)
+    if (!searchParams.has('encimada')) return
+    const siguientes = new URLSearchParams(searchParams)
+    siguientes.delete('encimada')
+    setSearchParams(siguientes, { replace: true })
+  }
+
   const handleEliminar = (encimada: Encimada) => {
     const vinculados = articulos.filter((a) => a.encimadaId === encimada.id).length
     const extra = vinculados
@@ -52,7 +77,7 @@ export function CargaCapasPage() {
       return
     }
     deleteEncimada(encimada.id)
-    if (viewing?.id === encimada.id) setViewing(null)
+    if (viewing?.id === encimada.id) cerrarDetalle()
     if (editing?.id === encimada.id) setEditing(null)
   }
 
@@ -85,6 +110,9 @@ export function CargaCapasPage() {
           encimadasOrdenadas.map((encimada) => {
             const t = totales(encimada)
             const items = encimada.items.filter((i) => i.modeloNombre.trim())
+            const telasTexto = telasDeEncimada(encimada)
+              .map((tela) => tela.telaNombre)
+              .join(' · ')
 
             return (
               <div
@@ -93,31 +121,30 @@ export function CargaCapasPage() {
                 className="cursor-pointer rounded-lg border border-stone-200 bg-white p-3.5 shadow-sm active:bg-stone-50 transition-colors"
               >
                 <div className="flex items-center justify-between border-b border-stone-100 pb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-stone-900">{encimada.codigo}</span>
-                    <span className="text-xs text-stone-500">{formatDate(encimada.fecha)}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                        encimada.estado === 'EN_CORTE'
-                          ? 'bg-amber-100 text-amber-800'
-                          : 'bg-emerald-100 text-emerald-800'
-                      }`}
-                    >
-                      {encimada.estado === 'EN_CORTE' ? 'En corte' : 'Cerrada'}
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="shrink-0 font-semibold text-stone-900">{encimada.codigo}</span>
+                    <span className="shrink-0 text-xs text-stone-500">
+                      {formatDate(encimada.fecha)}
                     </span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleEliminar(encimada)
-                      }}
-                      className="rounded px-1.5 py-0.5 text-[11px] font-medium text-red-700 hover:bg-red-50"
-                    >
-                      Eliminar
-                    </button>
+                    {telasTexto && (
+                      <span
+                        title={telasTexto}
+                        className="min-w-0 truncate text-[11px] text-stone-500"
+                      >
+                        · {telasTexto}
+                      </span>
+                    )}
                   </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleEliminar(encimada)
+                    }}
+                    className="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium text-red-700 hover:bg-red-50"
+                  >
+                    Eliminar
+                  </button>
                 </div>
 
                 <div className="mt-2 space-y-1 text-xs text-stone-600">
@@ -159,7 +186,7 @@ export function CargaCapasPage() {
           <thead className="bg-stone-50">
             <tr>
               <th className={`${th} text-left`}>Encimada</th>
-              <th className={`${th} text-left`}>Estado</th>
+              <th className={`${th} text-left`}>Telas usadas</th>
               <th className={thRight}>Capas</th>
               <th className={`${th} text-left`}>Modelos / capas por modelo</th>
               <th className={thRight}>Total prendas</th>
@@ -177,6 +204,9 @@ export function CargaCapasPage() {
               encimadasOrdenadas.map((encimada) => {
                 const t = totales(encimada)
                 const items = encimada.items.filter((i) => i.modeloNombre.trim())
+                const telasTexto = telasDeEncimada(encimada)
+                  .map((tela) => tela.telaNombre)
+                  .join(' · ')
                 return (
                   <tr
                     key={encimada.id}
@@ -188,15 +218,16 @@ export function CargaCapasPage() {
                       <div className="text-xs text-stone-500">{formatDate(encimada.fecha)}</div>
                     </td>
                     <td className="px-4 py-2.5">
-                      <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                          encimada.estado === 'EN_CORTE'
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-emerald-100 text-emerald-800'
-                        }`}
-                      >
-                        {encimada.estado === 'EN_CORTE' ? 'En corte' : 'Cerrada'}
-                      </span>
+                      {telasTexto ? (
+                        <span
+                          title={telasTexto}
+                          className="block max-w-[12rem] truncate text-xs font-medium text-stone-700"
+                        >
+                          {telasTexto}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-stone-400">Sin telas</span>
+                      )}
                     </td>
                     <td className={`${tdRight} font-semibold`}>{t.capas}</td>
                     <td className="px-4 py-2.5">
@@ -257,10 +288,10 @@ export function CargaCapasPage() {
       {viewing && (
         <EncimadaDetalleModal
           encimada={viewing}
-          onClose={() => setViewing(null)}
+          onClose={cerrarDetalle}
           onEdit={() => {
             const enc = viewing
-            setViewing(null)
+            cerrarDetalle()
             setEditing(enc)
           }}
           onDelete={() => handleEliminar(viewing)}

@@ -38,13 +38,19 @@ export function EncimadaDetalleModal({ encimada, onClose, onEdit, onDelete }: Pr
   const tallesPorCapa = itemsValidos.reduce((a, i) => a + (Number(i.cantidad) || 0), 0)
   const prendasTotales = capasTotales * tallesPorCapa
 
-  const capasPorColor = new Map<string, number>()
+  const capasPorColor = new Map<
+    string,
+    { key: string; nombre: string; capas: number }
+  >()
   for (const carga of encimada.cargas) {
-    if (!carga.colorNombre.trim() || carga.capas <= 0) continue
-    const color = carga.colorNombre.trim()
-    capasPorColor.set(color, (capasPorColor.get(color) ?? 0) + carga.capas)
+    const nombre = carga.colorNombre.trim()
+    if (!nombre || carga.capas <= 0) continue
+    const key = nombre.toLowerCase()
+    const actual = capasPorColor.get(key)
+    if (actual) actual.capas += carga.capas
+    else capasPorColor.set(key, { key, nombre, capas: carga.capas })
   }
-  const colores = Array.from(capasPorColor.keys())
+  const colores = Array.from(capasPorColor.values())
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4">
@@ -63,6 +69,9 @@ export function EncimadaDetalleModal({ encimada, onClose, onEdit, onDelete }: Pr
               >
                 {encimada.estado === 'EN_CORTE' ? 'En corte' : 'Cerrada'}
               </span>
+              <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                {prendasTotales} prendas
+              </span>
             </div>
             <p className="mt-0.5 text-xs text-stone-500">{formatDate(encimada.fecha)}</p>
             {encimada.notas && (
@@ -80,77 +89,44 @@ export function EncimadaDetalleModal({ encimada, onClose, onEdit, onDelete }: Pr
 
         {/* Cuerpo */}
         <div className="flex-1 space-y-4 overflow-y-auto p-4">
-          {/* Totales */}
-          <div className="grid grid-cols-3 gap-2">
-            <div className="rounded-lg border border-stone-200 bg-white p-3 text-center shadow-sm">
-              <div className="text-[10px] font-medium uppercase tracking-wide text-stone-500">
-                Capas
-              </div>
-              <div className="mt-0.5 text-lg font-bold text-stone-900">{capasTotales}</div>
-            </div>
-            <div className="rounded-lg border border-stone-200 bg-white p-3 text-center shadow-sm">
-              <div className="text-[10px] font-medium uppercase tracking-wide text-stone-500">
-                Modelos
-              </div>
-              <div className="mt-0.5 text-lg font-bold text-stone-900">
-                {itemsValidos.length}
-              </div>
-            </div>
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 text-center shadow-sm">
-              <div className="text-[10px] font-medium uppercase tracking-wide text-emerald-700">
-                Prendas
-              </div>
-              <div className="mt-0.5 text-lg font-bold text-emerald-900">
-                {prendasTotales}
-              </div>
-            </div>
-          </div>
-
           {/* Capas por color */}
           <div className="overflow-hidden rounded-lg border border-stone-200 bg-white">
-            <div className="border-b border-stone-200 bg-stone-50 px-3.5 py-2.5">
+            <div className="flex items-center justify-between gap-2 border-b border-stone-200 bg-stone-50 px-3.5 py-2.5">
               <span className="text-xs font-semibold uppercase tracking-wide text-stone-700">
                 Capas por color
               </span>
+              <span className="text-[11px] text-stone-500">{capasTotales} capas</span>
             </div>
             <table className="w-full divide-y divide-stone-200">
               <thead className="bg-white">
                 <tr>
                   <th className={`${th} text-left`}>Color</th>
                   <th className={thRight}>Capas</th>
-                  <th className={thRight}>% del total</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
                 {colores.length === 0 ? (
                   <tr>
-                    <td colSpan={3} className="px-3 py-4 text-center text-xs text-stone-400">
+                    <td colSpan={2} className="px-3 py-4 text-center text-xs text-stone-400">
                       Sin capas cargadas.
                     </td>
                   </tr>
                 ) : (
-                  colores.map((color) => {
-                    const capas = capasPorColor.get(color) ?? 0
-                    const porcentaje = capasTotales > 0 ? (capas / capasTotales) * 100 : 0
-                    return (
-                      <tr key={color}>
-                        <td className={td}>
-                          <div className="flex items-center gap-1.5">
-                            <span
-                              className={`h-2.5 w-2.5 shrink-0 rounded-full border border-stone-300 ${
-                                COLOR_SWATCH[color] ?? 'bg-stone-200'
-                              }`}
-                            />
-                            {color}
-                          </div>
-                        </td>
-                        <td className={tdRight}>{capas}</td>
-                        <td className={`${tdRight} text-stone-500`}>
-                          {porcentaje.toFixed(1)}%
-                        </td>
-                      </tr>
-                    )
-                  })
+                  colores.map((color) => (
+                    <tr key={color.key}>
+                      <td className={td}>
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`h-2.5 w-2.5 shrink-0 rounded-full border border-stone-300 ${
+                              COLOR_SWATCH[color.nombre] ?? 'bg-stone-200'
+                            }`}
+                          />
+                          {color.nombre}
+                        </div>
+                      </td>
+                      <td className={tdRight}>{color.capas}</td>
+                    </tr>
+                  ))
                 )}
               </tbody>
             </table>
@@ -169,10 +145,10 @@ export function EncimadaDetalleModal({ encimada, onClose, onEdit, onDelete }: Pr
                   <tr>
                     <th className={`${th} text-left`}>Modelo</th>
                     {colores.map((color) => (
-                      <th key={color} className={thRight}>
-                        <div>{color}</div>
+                      <th key={color.key} className={thRight}>
+                        <div>{color.nombre}</div>
                         <div className="text-[10px] font-normal normal-case text-stone-400">
-                          {capasPorColor.get(color) ?? 0} capas
+                          {color.capas} capas
                         </div>
                       </th>
                     ))}
@@ -203,8 +179,8 @@ export function EncimadaDetalleModal({ encimada, onClose, onEdit, onDelete }: Pr
                             </div>
                           </td>
                           {colores.map((color) => (
-                            <td key={color} className={tdRight}>
-                              {(capasPorColor.get(color) ?? 0) * cantidad}
+                            <td key={color.key} className={tdRight}>
+                              {color.capas * cantidad}
                             </td>
                           ))}
                           <td className={`${tdRight} font-semibold text-stone-900`}>
@@ -221,10 +197,10 @@ export function EncimadaDetalleModal({ encimada, onClose, onEdit, onDelete }: Pr
                       <td className={`${td} font-semibold text-stone-900`}>Total</td>
                       {colores.map((color) => (
                         <td
-                          key={color}
+                          key={color.key}
                           className={`${tdRight} font-semibold text-stone-900`}
                         >
-                          {(capasPorColor.get(color) ?? 0) * tallesPorCapa}
+                          {color.capas * tallesPorCapa}
                         </td>
                       ))}
                       <td className={`${tdRight} font-bold text-stone-900`}>
@@ -241,7 +217,7 @@ export function EncimadaDetalleModal({ encimada, onClose, onEdit, onDelete }: Pr
         {/* Pie */}
         <div className="flex flex-col gap-2 border-t border-stone-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="order-2 text-center text-[11px] text-stone-500 sm:order-1 sm:text-left">
-            {capasTotales} capas · {prendasTotales} prendas
+            {capasTotales} capas
           </div>
           <div className="order-1 flex gap-2">
             <Button variant="danger" className="flex-1 sm:flex-none" onClick={onDelete}>

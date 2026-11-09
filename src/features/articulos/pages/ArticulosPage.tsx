@@ -3,7 +3,9 @@ import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
 import { Pagination } from '../../../shared/components/Pagination'
 import { TallerTag } from '../../../shared/components/TallerTag'
+import { TelaTag } from '../../../shared/components/TelaTag'
 import { useErpStore } from '../../../data/erpStore'
+import { telasUnicas } from '../../../utils/telas'
 import { siguienteCodigo, siguienteId } from '../../../utils/codigos'
 import { ordenarPorCodigoDesc } from '../../../utils/orden'
 import type { Articulo } from '../../../types'
@@ -212,83 +214,89 @@ export function ArticulosPage() {
             const nombre = a.nombre || a.descripcion || 'Artículo'
             const margen = Number(a.margenReal || 0)
             const cantidad = Number(a.cantidadPrendas) || 0
+            const telasResumen = telasUnicas(a.telas || [])
 
             return (
               <div
                 key={a.id}
                 onClick={() => setViewing(a)}
-                className="cursor-pointer rounded-xl border border-stone-200 bg-white p-3.5 shadow-sm transition-colors active:bg-stone-50"
+                className="cursor-pointer overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm transition-colors active:bg-stone-50"
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="font-mono text-[11px] font-semibold text-amber-900">
+                <div className="px-3.5 pt-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-amber-900">
                       {a.codigoArticulo}
-                    </div>
+                    </span>
+                    <span
+                      title="Rendimiento (margen sobre costo)"
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                        margen >= 100
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : margen >= 50
+                            ? 'bg-stone-100 text-stone-700'
+                            : 'bg-amber-100 text-amber-800'
+                      }`}
+                    >
+                      {margen.toFixed(1)}%
+                    </span>
+                  </div>
+
+                  <div className="mt-1 flex min-w-0 items-center gap-1.5 overflow-hidden">
                     <div className="truncate text-sm font-semibold text-stone-900">
                       {nombre}
                     </div>
-                    <TallerTag
-                      tallerId={a.tallerId}
-                      tallerNombre={a.tallerNombre}
-                      className="mt-1"
-                    />
+                    {telasResumen.length > 0 && (
+                      <div className="flex shrink-0 items-center gap-1">
+                        {telasResumen.map((t) => (
+                          <TelaTag key={t.key} telaNombre={t.telaNombre} compact />
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <span
-                    title="Rendimiento (margen sobre costo)"
-                    className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                      margen >= 100
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : margen >= 50
-                          ? 'bg-stone-100 text-stone-700'
-                          : 'bg-amber-100 text-amber-800'
-                    }`}
-                  >
-                    {margen.toFixed(1)}%
-                  </span>
+
+                  <TallerTag
+                    tallerId={a.tallerId}
+                    tallerNombre={a.tallerNombre}
+                    className="mt-1"
+                  />
                 </div>
 
-                <div className="mt-2.5 space-y-2 rounded-lg bg-stone-50 px-2.5 py-2.5 text-xs">
-                  <div className="flex items-end justify-between gap-3">
-                    <div>
-                      <div className="text-[10px] text-stone-500">Precio venta</div>
-                      <div className="text-2xl font-bold leading-tight text-stone-900">
-                        <Money value={a.precioVenta} />
-                      </div>
-                      <div className="text-[10px] text-stone-400">por prenda</div>
+                <div className="mt-2.5 flex items-end justify-between gap-3 border-y border-stone-100 bg-stone-50/70 px-3.5 py-2.5">
+                  <div>
+                    <div className="text-[10px] text-stone-500">Precio venta</div>
+                    <div className="text-xl font-bold leading-tight text-stone-900">
+                      <Money value={a.precioVenta} />
                     </div>
-                    <div className="text-right">
-                      <div className="text-[10px] text-stone-500">Cantidad</div>
-                      <div className="text-2xl font-bold leading-tight text-stone-900">
-                        {cantidad}
-                      </div>
-                      <div className="text-[10px] text-stone-400">
-                        {cantidad === 1 ? 'prenda' : 'prendas'}
-                      </div>
+                    <div className="text-[10px] text-stone-400">por prenda</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[10px] text-stone-500">Cantidad</div>
+                    <div className="text-xl font-bold leading-tight text-stone-900">
+                      {cantidad}
+                    </div>
+                    <div className="text-[10px] text-stone-400">
+                      {cantidad === 1 ? 'prenda' : 'prendas'}
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 border-t border-stone-200 pt-2">
-                    <div>
-                      <div className="text-[10px] text-stone-500">Ganancia total</div>
-                      <div className="font-semibold text-emerald-800">
-                        +<Money value={a.gananciaTotal || 0} />
-                      </div>
-                      <div className="text-[10px] text-stone-400">
-                        {margen.toFixed(1)}% margen
-                      </div>
+                </div>
+
+                <div className="grid grid-cols-3 divide-x divide-stone-100 py-2 text-center">
+                  <div className="px-1.5">
+                    <div className="text-[10px] text-stone-500">Costo prenda</div>
+                    <div className="mt-0.5 text-xs font-semibold text-stone-900">
+                      <Money value={a.costoUnitario} />
                     </div>
-                    <div>
-                      <div className="text-[10px] text-stone-500">Costo taller</div>
-                      <div className="font-semibold text-stone-900">
-                        <Money value={a.manoObra} />
-                      </div>
-                      <div className="text-[10px] text-stone-400">por prenda</div>
+                  </div>
+                  <div className="px-1.5">
+                    <div className="text-[10px] text-stone-500">Costo taller</div>
+                    <div className="mt-0.5 text-xs font-semibold text-stone-900">
+                      <Money value={a.manoObra} />
                     </div>
-                    <div className="text-right">
-                      <div className="text-[10px] text-stone-500">Costo de prenda</div>
-                      <div className="font-semibold text-stone-900">
-                        <Money value={a.costoUnitario} />
-                      </div>
-                      <div className="text-[10px] text-stone-400">mínimo</div>
+                  </div>
+                  <div className="px-1.5">
+                    <div className="text-[10px] text-stone-500">Ganancia total</div>
+                    <div className="mt-0.5 text-xs font-semibold text-emerald-800">
+                      +<Money value={a.gananciaTotal || 0} />
                     </div>
                   </div>
                 </div>
@@ -328,7 +336,7 @@ export function ArticulosPage() {
                 const nombre = a.nombre || a.descripcion || 'Artículo'
                 const descripcion = a.nombre && a.descripcion ? a.descripcion : ''
                 const margen = Number(a.margenReal || 0)
-                const telasCount = a.telas?.length || 0
+                const telasResumen = telasUnicas(a.telas || [])
                 const cantidadPrendas = Number(a.cantidadPrendas) || 0
                 const ventaTotal = (Number(a.precioVenta) || 0) * cantidadPrendas
 
@@ -345,13 +353,11 @@ export function ArticulosPage() {
                       <div className="font-medium text-stone-900 group-hover:text-amber-800">
                         {nombre}
                       </div>
-                      <div className="flex flex-wrap items-center gap-1.5 text-xs text-stone-500">
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-stone-500">
                         {descripcion && <span>{descripcion}</span>}
-                        {telasCount > 0 && (
-                          <span className="rounded bg-stone-100 px-1.5 py-0.2 text-[10px] text-stone-600">
-                            {telasCount} {telasCount === 1 ? 'tela' : 'telas'}
-                          </span>
-                        )}
+                        {telasResumen.map((t) => (
+                          <TelaTag key={t.key} telaNombre={t.telaNombre} />
+                        ))}
                         <TallerTag tallerId={a.tallerId} tallerNombre={a.tallerNombre} />
                       </div>
                     </td>

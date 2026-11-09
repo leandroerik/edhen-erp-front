@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
 import { useErpStore } from '../../../data/erpStore'
@@ -18,6 +19,8 @@ function iniciales(nombre: string) {
 
 export function TalleresPage() {
   const { talleres, cortes, pagos, articulos, saveTaller, deleteTaller } = useErpStore()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tallerParam = searchParams.get('taller')
   const [busqueda, setBusqueda] = useState('')
   const [mostrarInactivos, setMostrarInactivos] = useState(false)
   const [modalAbierto, setModalAbierto] = useState(false)
@@ -74,13 +77,29 @@ export function TalleresPage() {
     return [...lista].sort((a, b) => a.nombre.localeCompare(b.nombre))
   }, [talleres, busqueda, mostrarInactivos])
 
+  useEffect(() => {
+    if (!tallerParam) return
+    const taller = talleres.find(
+      (item) => item.id === tallerParam || item.nombre === tallerParam,
+    )
+    if (taller) setViendo(taller)
+  }, [tallerParam, talleres])
+
+  const cerrarDetalle = () => {
+    setViendo(null)
+    if (!searchParams.has('taller')) return
+    const siguientes = new URLSearchParams(searchParams)
+    siguientes.delete('taller')
+    setSearchParams(siguientes, { replace: true })
+  }
+
   const abrirNuevo = () => {
     setEditando(null)
     setModalAbierto(true)
   }
 
   const abrirEditar = (taller: Taller) => {
-    setViendo(null)
+    cerrarDetalle()
     setEditando(taller)
     setModalAbierto(true)
   }
@@ -100,7 +119,7 @@ export function TalleresPage() {
       stats && stats.cortes > 0 ? ` Tiene ${stats.cortes} corte(s) asociado(s).` : ''
     if (window.confirm(`¿Eliminar el taller "${taller.nombre}"?${detalle}`)) {
       deleteTaller(taller.id)
-      if (viendo?.id === taller.id) setViendo(null)
+      if (viendo?.id === taller.id) cerrarDetalle()
       if (editando?.id === taller.id) setEditando(null)
     }
   }
@@ -324,7 +343,7 @@ export function TalleresPage() {
               a.tallerId === viendo.id ||
               (!a.tallerId && a.tallerNombre === viendo.nombre),
           )}
-          onClose={() => setViendo(null)}
+          onClose={cerrarDetalle}
           onEdit={() => abrirEditar(viendo)}
           onDelete={() => handleDelete(viendo)}
         />
