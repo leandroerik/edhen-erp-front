@@ -3,7 +3,7 @@ import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
 import { StockIndicator } from '../../../shared/components/StockIndicator'
 import { formatDate } from '../../../utils/format'
-import { siguienteCodigo } from '../../../utils/codigos'
+import { formatRollos } from '../../../utils/stock'
 import { stockDesdeCompras, usosStockDesdeDatos } from '../../../data/mock'
 import { useErpStore } from '../../../data/erpStore'
 import type { Compra, UnidadTela } from '../../../types'
@@ -16,12 +16,8 @@ const td = 'px-3 py-2.5 text-sm text-stone-900'
 type SortField = 'fecha' | 'codigo' | 'total'
 type SortOrder = 'desc' | 'asc'
 
-function proveedorIdDesdeNombre(nombre: string) {
-  return `prov-${nombre.trim().toLowerCase().replace(/\s+/g, '-')}`
-}
-
 export function RollosPage() {
-  const { compras, encimadas, articulos, proveedores, addCompra, addProveedor } = useErpStore()
+  const { compras, encimadas, articulos, addCompra } = useErpStore()
   const [open, setOpen] = useState(false)
   const [viewing, setViewing] = useState<Compra | null>(null)
   const [busqueda, setBusqueda] = useState('')
@@ -74,7 +70,7 @@ export function RollosPage() {
         (c.codigo || '').toLowerCase().includes(q) ||
         (c.telaNombre || '').toLowerCase().includes(q) ||
         (c.proveedorNombre || '').toLowerCase().includes(q) ||
-        (c.notaRemito || '').toLowerCase().includes(q)
+        String(c.notaRemito ?? '').toLowerCase().includes(q)
       )
     })
     .sort((a, b) => {
@@ -249,7 +245,7 @@ export function RollosPage() {
                   0,
                 )
                 const coloresTexto = (c.lotes || [])
-                  .map((l: any) => `${l.colorNombre} (${l.rollos})`)
+                  .map((l: any) => `${l.colorNombre} (${formatRollos(l.rollos)})`)
                   .join(', ')
                 const unidad = c.unidadCompra === 'METRO' ? 'm' : 'kg'
                 const consumo = consumoPorCompra.get(c.codigo)
@@ -284,7 +280,7 @@ export function RollosPage() {
                       </div>
                     </td>
                     <td className={`${td} text-xs text-stone-600`}>
-                      <div className="font-medium text-stone-800">{totalRollos} rollos</div>
+                      <div className="font-medium text-stone-800">{formatRollos(totalRollos)} rollos</div>
                       <div>{totalCantidad.toFixed(1)} {unidad}</div>
                     </td>
                     <td className="px-3 py-2">
@@ -382,47 +378,7 @@ export function RollosPage() {
         <NuevaCompraModal
           open={open}
           onClose={() => setOpen(false)}
-          onSave={(d) => {
-            const codigo = siguienteCodigo(
-              'COMP',
-              compras.map((c) => c.codigo),
-            )
-            const lotes = (d.lotes || []).map((l: any, idx: number) => ({
-              id: l.id || `lote-${Date.now()}-${idx}`,
-              colorId: l.colorId || `col-${(l.colorNombre || '').toLowerCase().replace(/\s+/g, '-')}`,
-              colorNombre: l.colorNombre,
-              rollos: Number(l.rollos) || 0,
-              cantidad: Number(l.cantidad) || 0,
-              subtotal: Number(l.subtotal) || 0,
-            }))
-            const proveedorNombre = (d.proveedor || '').trim() || 'Proveedor'
-            const proveedorExistente = proveedores.find(
-              (p) => p.nombre.trim().toLowerCase() === proveedorNombre.toLowerCase(),
-            )
-            const proveedorId =
-              proveedorExistente?.id ?? proveedorIdDesdeNombre(proveedorNombre)
-            if ((d.proveedor || '').trim()) {
-              addProveedor({ id: proveedorId, nombre: proveedorNombre })
-            }
-
-            const nueva = {
-              id: `comp-${Date.now()}`,
-              codigo,
-              fecha: d.fecha,
-              proveedorId,
-              proveedorNombre,
-              telaId: `tel-${(d.tela || '').toLowerCase().replace(/\s+/g, '-')}`,
-              telaNombre: d.tela,
-              unidadCompra: d.unidad,
-              precioUnitario: Number(d.precioUnitario) || 0,
-              lotes,
-              flete: Number(d.flete) || 0,
-              notaRemito: d.notaRemito,
-              total: Number(d.total) || 0,
-              usada: false,
-            }
-            addCompra(nueva)
-          }}
+          onSave={(nueva) => addCompra(nueva)}
         />
       )}
     </div>

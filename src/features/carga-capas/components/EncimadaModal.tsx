@@ -2,9 +2,14 @@ import { useState, useMemo } from 'react'
 import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
 import { mockColores, mockModelos } from '../../../data/mock'
-import { fechaISO, hoyISO, uid } from '../../../utils/format'
-import { formatRollos, redondearRollos } from '../../../utils/stock'
-import { comprasDesdeStock } from '../../articulos/stockRollos'
+import { fechaISO, formatARS, hoyISO, uid } from '../../../utils/format'
+import { formatCantidad, formatRollos, redondearRollos } from '../../../utils/stock'
+import {
+  buscarOpcionVigente,
+  buscarPrecioVigente,
+  comprasDesdeStock,
+  promedioPorRollo,
+} from '../../articulos/stockRollos'
 import { usosStockDesdeDatos } from '../../../data/mock'
 import { useErpStore } from '../../../data/erpStore'
 import type {
@@ -111,6 +116,7 @@ export function EncimadaModal({ encimada, idSugerido, codigoSugerido, onClose, o
   )
   const [rollosEdit, setRollosEdit] = useState<Record<string, string>>({})
   const [selectedRolloKey, setSelectedRolloKey] = useState('')
+  const [actualizandoPrecios, setActualizandoPrecios] = useState(false)
 
   const [items, setItems] = useState<EncimadaItem[]>(() => {
     if (encimada?.items && encimada.items.length > 0) {
@@ -173,7 +179,7 @@ export function EncimadaModal({ encimada, idSugerido, codigoSugerido, onClose, o
     return grupos
   }, [])
 
-  const { compras, encimadas, articulos } = useErpStore()
+  const { compras, encimadas, articulos, refrescarComprasDesdeSheets } = useErpStore()
   const usosStock = useMemo(
     () => usosStockDesdeDatos(encimadas, articulos),
     [encimadas, articulos],
@@ -200,15 +206,115 @@ export function EncimadaModal({ encimada, idSugerido, codigoSugerido, onClose, o
     return comprasLista.flatMap((compra) => compra.opciones)
   }, [comprasLista])
 
+  // Precio actual de cada tela usada, según las compras cargadas.
+  const telasConCambio = useMemo(
+    () =>
+      telasUsadas.filter((tela) => {
+        const actual = buscarPrecioVigente(tela, opcionesStock)?.precioUnitario
+        return (
+          typeof actual === 'number' &&
+          Math.abs(actual - (Number(tela.precioUnitario) || 0)) > 0.5
+        )
+      }),
+    [telasUsadas, opcionesStock],
+  )
+
+  const handleActualizarPrecios = async () => {
+    if (actualizandoPrecios) return
+    setActualizandoPrecios(true)
+    try {
+      // Consulta las compras directo en Sheets: no hace falta sincronizar todo.
+      const comprasSheets = await refrescarComprasDesdeSheets()
+      const base = comprasSheets ?? compras
+      const opcionesFrescas = comprasDesdeStock(base, usosStock).flatMap(
+        (c) => c.opciones,
+      )
+
+      const nuevasTelas = telasUsadas.map((tela) => {
+        const opcion = buscarOpcionVigente(tela, opcionesFrescas)
+        if (!opcion) return tela
+        const rollos = Number(tela.rollosUsados) || 0
+        const promedio = promedioPorRollo(opcion)
+        const cantidadUsada =
+          promedio > 0
+            ? Math.round(rollos * promedio * 10) / 10
+            : Number(tela.cantidadUsada) || 0
+        const precio = Number(opcion.precioUnitario) || tela.precioUnitario
+        const mismaCompra = opcion.compraCodigo === tela.compraCodigo
+        return {
+          ...tela,
+          precioUnitario: precio,
+          rollosDisponibles: Math.max(rollos, opcion.rollosDisponibles + rollos),
+          cantidadDisponible:
+            opcion.cantidadDisponible + (Number(tela.cantidadUsada) || 0),
+          cantidadUsada,
+          costoUsado: Math.round(cantidadUsada * precio),
+          compraFecha: mismaCompra ? opcion.compraFecha : tela.compraFecha,
+          proveedorNombre: mismaCompra
+            ? opcion.proveedorNombre
+            : tela.proveedorNombre,
+        }
+      })
+
+      const hayCambios = nuevasTelas.some((tela, idx) => {
+        const previa = telasUsadas[idx]
+        return (
+          Math.abs(tela.precioUnitario - previa.precioUnitario) > 0.5 ||
+          Math.abs(tela.cantidadUsada - previa.cantidadUsada) > 0.05
+        )
+      })
+
+      if (!hayCambios) {
+        window.alert(
+          comprasSheets
+            ? 'Los precios y metrajes ya coinciden con las compras de Sheets.'
+            : 'No se pudo consultar Sheets. Los datos locales ya están al día.',
+        )
+        return
+      }
+
+      const costoNuevo = nuevasTelas.reduce(
+        (a, t) => a + (Number(t.costoUsado) || 0),
+        0,
+      )
+      const metrajeActual = telasUsadas.reduce(
+        (a, t) => a + (Number(t.cantidadUsada) || 0),
+        0,
+      )
+      const metrajeNuevo = nuevasTelas.reduce(
+        (a, t) => a + (Number(t.cantidadUsada) || 0),
+        0,
+      )
+
+      const mensaje = [
+        '¿Actualizar precio y metraje de las telas con los datos actuales de Sheets?',
+        '',
+        `Costo de telas actual: ${formatARS(costoTotalTelas)}`,
+        `Costo de telas nuevo: ${formatARS(costoNuevo)}`,
+        `Metraje actual: ${formatRollos(metrajeActual)} (m/kg)`,
+        `Metraje nuevo: ${formatRollos(metrajeNuevo)} (m/kg)`,
+        '',
+        'Al guardar la encimada se recalculan los costos de los artículos vinculados y de sus cortes. El precio de venta se conserva.',
+        comprasSheets
+          ? ''
+          : 'No se pudo consultar Sheets: se usaron las compras cargadas localmente.',
+      ].join('\n')
+
+      if (!window.confirm(mensaje)) return
+
+      setTelasUsadas(nuevasTelas)
+    } finally {
+      setActualizandoPrecios(false)
+    }
+  }
+
   const agregarTelaDesdeStock = () => {
     const opcion = opcionesStock.find((op) => op.key === selectedRolloKey)
     if (!opcion) return
 
     const rollosUsados = redondearRollos(opcion.rollosDisponibles)
-    const promPorRollo =
-      opcion.rollosDisponibles > 0
-        ? opcion.cantidadDisponible / opcion.rollosDisponibles
-        : 15
+    // Promedio real del lote completo (no del stock restante).
+    const promPorRollo = promedioPorRollo(opcion) || 15
     const cantidadUsada = Math.round(rollosUsados * promPorRollo * 10) / 10
     const costoUsado = Math.round(cantidadUsada * opcion.precioUnitario)
 
@@ -264,8 +370,12 @@ export function EncimadaModal({ encimada, idSugerido, codigoSugerido, onClose, o
           const isCustom = t.compraCodigo === 'CUSTOM'
           const maxRollos = isCustom ? Math.max(t.rollosDisponibles, num) : t.rollosDisponibles
           const r = Math.max(0, Math.min(maxRollos, redondearRollos(num)))
-          const promPorRollo =
-            t.rollosDisponibles > 0 ? t.cantidadDisponible / t.rollosDisponibles : 15
+          const opcion = buscarOpcionVigente(t, opcionesStock)
+          const promPorRollo = opcion
+            ? promedioPorRollo(opcion) || 15
+            : t.rollosDisponibles > 0
+              ? t.cantidadDisponible / t.rollosDisponibles
+              : 15
           const cantidadUsada = Math.round(r * promPorRollo * 10) / 10
           const costoUsado = Math.round(cantidadUsada * t.precioUnitario)
           return {
@@ -607,12 +717,41 @@ export function EncimadaModal({ encimada, idSugerido, codigoSugerido, onClose, o
                     <strong className="font-semibold text-stone-800">
                       <Money value={costoTotalTelas} />
                     </strong>
+                    {telasConCambio.length > 0 && (
+                      <span className="ml-1.5 font-medium text-amber-700">
+                        · ↻ {telasConCambio.length} sin actualizar
+                      </span>
+                    )}
                   </>
                 )}
               </span>
             </summary>
 
             <div className="space-y-2.5 border-t border-stone-200 p-3">
+              {telasUsadas.length > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={handleActualizarPrecios}
+                    disabled={actualizandoPrecios}
+                    title="Consulta en Sheets el precio y el metraje actuales de cada lote"
+                    className={`rounded-md border px-2.5 py-1 text-[11px] font-medium transition ${
+                      telasConCambio.length > 0
+                        ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'
+                        : 'border-stone-300 bg-white text-stone-700 hover:bg-stone-50'
+                    } disabled:cursor-wait disabled:opacity-60`}
+                  >
+                    {actualizandoPrecios
+                      ? 'Consultando Sheets…'
+                      : telasConCambio.length > 0
+                        ? `↻ Actualizar precios (${telasConCambio.length})`
+                        : '↻ Actualizar precios'}
+                  </button>
+                  <span className="text-[11px] text-stone-500">
+                    Precios y metrajes según Sheets
+                  </span>
+                </div>
+              )}
               <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
                 <select
                   className={inputCls}
@@ -661,6 +800,10 @@ export function EncimadaModal({ encimada, idSugerido, codigoSugerido, onClose, o
                       (a, t) => a + (Number(t.rollosUsados) || 0),
                       0,
                     )
+                    const costoGrupo = grupo.telas.reduce(
+                      (a, t) => a + (Number(t.costoUsado) || 0),
+                      0,
+                    )
                     return (
                       <div
                         key={grupo.key}
@@ -688,6 +831,10 @@ export function EncimadaModal({ encimada, idSugerido, codigoSugerido, onClose, o
                               rollos disp.
                             </strong>{' '}
                             · Usando: <strong className="text-amber-800">{formatRollos(rollosGrupo)}</strong>
+                            {' '}· Subtotal:{' '}
+                            <strong className="font-semibold text-stone-800">
+                              <Money value={costoGrupo} />
+                            </strong>
                           </span>
                         </div>
                         <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -695,10 +842,8 @@ export function EncimadaModal({ encimada, idSugerido, codigoSugerido, onClose, o
                             const quedan = tela.rollosDisponibles - tela.rollosUsados
                             const esTodo = tela.rollosUsados >= tela.rollosDisponibles
                             return (
-                              <div
-                                key={tela.id}
-                                className="flex items-center gap-1.5 rounded-full border border-stone-200 bg-white py-1 pl-2.5 pr-1.5 shadow-sm"
-                              >
+                              <div key={tela.id} className="flex flex-col items-start gap-0.5">
+                                <div className="flex items-center gap-1.5 rounded-full border border-stone-200 bg-white py-1 pl-2.5 pr-1.5 shadow-sm">
                                 <span
                                   className={`h-2.5 w-2.5 shrink-0 rounded-full border border-stone-300 ${COLOR_SWATCH[tela.colorNombre] ?? 'bg-stone-200'
                                     }`}
@@ -783,6 +928,14 @@ export function EncimadaModal({ encimada, idSugerido, codigoSugerido, onClose, o
                                 >
                                   ✕
                                 </button>
+                                </div>
+                                <span className="pl-1 text-[10px] text-stone-500">
+                                  {formatCantidad(Number(tela.cantidadUsada) || 0, tela.unidad)} usados ·{' '}
+                                  <Money value={tela.precioUnitario} />/{tela.unidad === 'METRO' ? 'm' : 'kg'} ·{' '}
+                                  <strong className="font-semibold text-stone-700">
+                                    <Money value={tela.costoUsado} />
+                                  </strong>
+                                </span>
                               </div>
                             )
                           })}

@@ -6,6 +6,7 @@ import { formatCantidad, formatRollos, getStockInfo } from '../../../utils/stock
 import { mockTelas, stockDesdeCompras, usosStockDesdeDatos } from '../../../data/mock'
 import { useErpStore } from '../../../data/erpStore'
 import type { Compra } from '../../../types'
+import { NuevaCompraModal } from './NuevaCompraModal'
 
 interface Props {
   compra: Compra
@@ -65,6 +66,7 @@ export function CompraDetalleModal({ compra: compraInicial, onClose }: Props) {
   const { compras, encimadas, articulos, updateCompra } = useErpStore()
   const compra = compras.find((c) => c.id === compraInicial.id) ?? compraInicial
   const [editandoTela, setEditandoTela] = useState(false)
+  const [editandoCompra, setEditandoCompra] = useState(false)
   const [telaEdit, setTelaEdit] = useState(compra.telaNombre)
   const usosStock = usosStockDesdeDatos(encimadas, articulos)
   const stockActual = stockDesdeCompras(compras, usosStock)
@@ -195,9 +197,9 @@ export function CompraDetalleModal({ compra: compraInicial, onClose }: Props) {
             </span>
             <span>
               <span className="text-stone-500">Rollos:</span>{' '}
-              <strong className="text-stone-900">{totalRollos}</strong>{' '}
+              <strong className="text-stone-900">{formatRollos(totalRollos)}</strong>{' '}
               <span className="text-stone-500">
-                ({totalRollosDisponibles} disp.)
+                ({formatRollos(totalRollosDisponibles)} disp.)
               </span>
             </span>
             <span>
@@ -221,6 +223,7 @@ export function CompraDetalleModal({ compra: compraInicial, onClose }: Props) {
                   <th className={`${th} text-left`}>Color</th>
                   <th className={thRight}>Rollos</th>
                   <th className={thRight}>Cantidad ({unidad})</th>
+                  <th className={thRight}>Precio/u.</th>
                   <th className={`${th} text-left`}>Disponible</th>
                   <th className={thRight}>Subtotal</th>
                 </tr>
@@ -247,13 +250,19 @@ export function CompraDetalleModal({ compra: compraInicial, onClose }: Props) {
                         </div>
                       </td>
                       <td className={tdRight}>
-                        <div>{l.rollos}</div>
+                        <div>{formatRollos(l.rollos)}</div>
                         <div className="text-[10px] font-normal text-stone-500">
                           Disp. {formatRollos(rollosDisponibles)}
                         </div>
                       </td>
                       <td className={tdRight}>
-                        {Number(l.cantidad || 0).toFixed(2)} {unidad}
+                        <div>{Number(l.cantidad || 0).toFixed(2)} {unidad}</div>
+                        <div className="text-[10px] font-normal text-stone-500">
+                          Usado {formatCantidad(usadoCantidad, compra.unidadCompra)}
+                        </div>
+                      </td>
+                      <td className={`${tdRight} text-stone-700`}>
+                        <Money value={compra.precioUnitario} />
                       </td>
                       <td className={td}>
                         <CompactStock
@@ -280,13 +289,19 @@ export function CompraDetalleModal({ compra: compraInicial, onClose }: Props) {
                     ) : null}
                   </td>
                   <td className="px-3 py-1.5 text-right text-xs tabular-nums">
-                    {totalRollos}
+                    {formatRollos(totalRollos)}
                     <span className="block text-[10px] font-normal text-stone-500">
-                      {totalRollosDisponibles} disp.
+                      {formatRollos(totalRollosDisponibles)} disp.
                     </span>
                   </td>
                   <td className="px-3 py-1.5 text-right text-xs tabular-nums">
-                    {totalCantidad.toFixed(2)} {unidad}
+                    <div>{totalCantidad.toFixed(2)} {unidad}</div>
+                    <span className="block text-[10px] font-normal text-stone-500">
+                      Usado {formatCantidad(totalUsado, compra.unidadCompra)}
+                    </span>
+                  </td>
+                  <td className="px-3 py-1.5 text-right text-xs tabular-nums text-stone-700">
+                    <Money value={compra.precioUnitario} />
                   </td>
                   <td className="px-3 py-1.5">
                     <CompactStock
@@ -305,12 +320,25 @@ export function CompraDetalleModal({ compra: compraInicial, onClose }: Props) {
         </div>
 
         {/* Pie */}
-        <div className="flex justify-end border-t border-stone-200 bg-white px-5 py-2.5">
+        <div className="flex justify-end gap-2 border-t border-stone-200 bg-white px-5 py-2.5">
+          <Button variant="secondary" onClick={() => setEditandoCompra(true)}>
+            Editar compra
+          </Button>
           <Button variant="secondary" onClick={onClose}>
             Cerrar
           </Button>
         </div>
       </div>
+
+      {editandoCompra && (
+        <NuevaCompraModal
+          key={compra.id}
+          open={editandoCompra}
+          compra={compra}
+          onClose={() => setEditandoCompra(false)}
+          onSave={(actualizada) => updateCompra(actualizada)}
+        />
+      )}
     </div>
   )
 }

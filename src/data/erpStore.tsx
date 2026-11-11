@@ -23,7 +23,11 @@ import type {
   Taller,
   TelaArticulo,
 } from '../types'
-import { fetchGasBootstrap, postGasAction, postGasBatch } from '../api/gasClient'
+import {
+  fetchGasBootstrap,
+  postGasAction,
+  postGasBatch,
+} from '../api/gasClient'
 import {
   anchoCodigo,
   renumerarConsecutivos,
@@ -94,6 +98,21 @@ function saveStoreData(data: StoredData) {
   }
 }
 
+/**
+ * Precio/metraje vigente de una tela, calculado en el artículo, que se refleja
+ * en la encimada de origen para no tener que refrescar en las dos pantallas.
+ */
+export interface TelaPrecioRef {
+  stockKey?: string
+  loteId?: string
+  compraCodigo?: string
+  telaNombre: string
+  colorNombre: string
+  precioUnitario: number
+  /** Metros/kilos por rollo del lote completo (no del stock restante). */
+  promedioPorRollo?: number
+}
+
 interface ErpStore {
   articulos: Articulo[]
   encimadas: Encimada[]
@@ -104,6 +123,11 @@ interface ErpStore {
   proveedores: Proveedor[]
   addCompra: (compra: Compra) => void
   updateCompra: (compra: Compra) => void
+  refrescarComprasDesdeSheets: () => Promise<Compra[] | null>
+  sincronizarPreciosEncimada: (
+    encimadaId: string,
+    telas: TelaPrecioRef[],
+  ) => void
   addProveedor: (proveedor: Proveedor) => void
   saveTaller: (taller: Taller) => void
   deleteTaller: (tallerId: string) => void
@@ -135,6 +159,42 @@ interface ErpStore {
 }
 
 const ErpStoreContext = createContext<ErpStore | null>(null)
+
+const normalizarClave = (valor?: string) => String(valor ?? '').trim().toLowerCase()
+
+/**
+ * Busca la referencia de precio que corresponde a una tela de la encimada,
+ * con la misma prioridad que `buscarOpcionVigente`: lote exacto, compra+lote,
+ * compra+color y, como último recurso, tela+color.
+ */
+function buscarTelaPrecioRef(
+  refs: TelaPrecioRef[],
+  tela: { stockKey?: string; compraCodigo?: string; loteId?: string; telaNombre: string; colorNombre: string },
+): TelaPrecioRef | undefined {
+  if (tela.stockKey) {
+    const exacta = refs.find((r) => r.stockKey && r.stockKey === tela.stockKey)
+    if (exacta) return exacta
+  }
+  if (tela.compraCodigo && tela.loteId) {
+    const porLote = refs.find(
+      (r) => r.compraCodigo === tela.compraCodigo && r.loteId === tela.loteId,
+    )
+    if (porLote) return porLote
+  }
+  if (tela.compraCodigo) {
+    const porCompra = refs.find(
+      (r) =>
+        r.compraCodigo === tela.compraCodigo &&
+        normalizarClave(r.colorNombre) === normalizarClave(tela.colorNombre),
+    )
+    if (porCompra) return porCompra
+  }
+  return refs.find(
+    (r) =>
+      normalizarClave(r.telaNombre) === normalizarClave(tela.telaNombre) &&
+      normalizarClave(r.colorNombre) === normalizarClave(tela.colorNombre),
+  )
+}
 
 function nextArticuloSeq(articulos: Articulo[]) {
   const numeros = articulos
@@ -196,6 +256,47 @@ function normalizarCodigos(articulos: Articulo[], encimadas: Encimada[]) {
 
 function totalCapas(encimada: Encimada) {
   return encimada.cargas.reduce((a, c) => a + c.capas, 0)
+}
+
+/**
+ * Sheets devuelve números en columnas de texto (ej. remito "12345"), así que
+ * cualquier campo de texto se normaliza a string antes de guardarlo o usarlo.
+ */
+function normalizarTexto(valor: unknown): string | undefined {
+  if (valor === null || valor === undefined) return undefined
+  const texto = String(valor).trim()
+  return texto || undefined
+}
+
+function normalizarCompra(compra: Compra): Compra {
+  return {
+    ...compra,
+    codigo: String(compra.codigo ?? ''),
+    fecha: String(compra.fecha ?? ''),
+    proveedorNombre: String(compra.proveedorNombre ?? ''),
+    telaNombre: String(compra.telaNombre ?? ''),
+    notaRemito: normalizarTexto(compra.notaRemito),
+    lotes: (compra.lotes ?? []).map((lote) => ({
+      ...lote,
+      colorId: String(lote.colorId ?? ''),
+      colorNombre: String(lote.colorNombre ?? ''),
+    })),
+  }
+}
+
+/** Normaliza la compra y recalcula subtotales y total con el precio actual. */
+function prepararCompra(compra: Compra): Compra {
+  const precioUnitario = Math.max(0, Number(compra.precioUnitario) || 0)
+  const flete = Math.max(0, Number(compra.flete) || 0)
+  const lotes = (compra.lotes || []).map((lote) => ({
+    ...lote,
+    rollos: Number(lote.rollos) || 0,
+    cantidad: Number(lote.cantidad) || 0,
+    subtotal: Math.round((Number(lote.cantidad) || 0) * precioUnitario),
+  }))
+  const total =
+    lotes.reduce((acumulado, lote) => acumulado + lote.subtotal, 0) + flete
+  return normalizarCompra({ ...compra, precioUnitario, flete, lotes, total })
 }
 
 /**
@@ -427,6 +528,22 @@ function articuloDesdeItem(
     tallerId: existente?.tallerId,
     tallerNombre: existente?.tallerNombre,
     corteId: existente?.corteId,
+  }
+}
+
+/** Copia al corte los costos del artículo del que depende. */
+function corteDesdeArticulo(corte: Corte, articulo: Articulo): Corte {
+  return {
+    ...corte,
+    modeloNombre: articulo.nombre,
+    tallerId: articulo.tallerId || corte.tallerId,
+    tallerNombre: articulo.tallerNombre || corte.tallerNombre,
+    cantidadPrendas: articulo.cantidadPrendas,
+    precioPorPrenda: articulo.manoObra,
+    costoTela: articulo.costoTelaTotalUsado,
+    costoManoObra: articulo.manoObra * articulo.cantidadPrendas,
+    costoTotal: articulo.costoTotalProduccion,
+    costoPorPrenda: articulo.costoUnitario,
   }
 }
 
@@ -685,13 +802,83 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
   }
 
   const addCompra = (compra: Compra) => {
-    setCompras((prev) => [compra, ...prev])
-    postGasAction('guardarCompra', compra)
+    const normalizada = normalizarCompra(compra)
+    setCompras((prev) => [normalizada, ...prev])
+    postGasAction('guardarCompra', normalizada)
   }
 
   const updateCompra = (compra: Compra) => {
-    setCompras((prev) => prev.map((c) => (c.id === compra.id ? compra : c)))
-    postGasAction('guardarCompra', compra)
+    const compraActualizada = prepararCompra(compra)
+    setCompras((prev) =>
+      prev.map((c) => (c.id === compraActualizada.id ? compraActualizada : c)),
+    )
+    postGasAction('guardarCompra', compraActualizada)
+  }
+
+  /**
+   * Trae las compras directamente de Sheets, sin tocar artículos, cortes ni
+   * encimadas. Sirve para refrescar precios y metrajes con lo último del
+   * servidor sin hacer una sincronización completa.
+   */
+  const refrescarComprasDesdeSheets = async (): Promise<Compra[] | null> => {
+    const datos = await fetchGasBootstrap()
+    const comprasSheets = Array.isArray(datos?.compras) ? datos.compras : []
+    if (comprasSheets.length === 0) return null
+    const normalizadas = comprasSheets.map((compra: Compra) =>
+      prepararCompra(compra),
+    )
+    setCompras(normalizadas)
+    return normalizadas
+  }
+
+  /**
+   * Refleja en la encimada de origen los precios y metrajes recalculados desde
+   * un artículo, para que no haya que refrescar en las dos pantallas.
+   *
+   * Solo actualiza precio y metraje: los rollos consumidos siguen siendo los de
+   * la encimada, que es la fuente de verdad de la tizada.
+   */
+  const sincronizarPreciosEncimada = (
+    encimadaId: string,
+    telas: TelaPrecioRef[],
+  ) => {
+    if (!encimadaId || telas.length === 0) return
+    const encimada = encimadas.find((e) => e.id === encimadaId)
+    if (!encimada) return
+
+    let cambio = false
+    const telasUsadas = (encimada.telasUsadas || []).map((tela) => {
+      const ref = buscarTelaPrecioRef(telas, tela)
+      if (!ref) return tela
+
+      const precioUnitario =
+        Number(ref.precioUnitario) > 0 ? Number(ref.precioUnitario) : tela.precioUnitario
+      const promedio = Number(ref.promedioPorRollo) || 0
+      const rollos = Number(tela.rollosUsados) || 0
+      const cantidadUsada =
+        promedio > 0
+          ? Math.round(promedio * rollos * 10) / 10
+          : Number(tela.cantidadUsada) || 0
+      const costoUsado = Math.round(cantidadUsada * precioUnitario)
+
+      if (
+        Math.abs(cantidadUsada - tela.cantidadUsada) < 0.05 &&
+        Math.abs(precioUnitario - tela.precioUnitario) < 0.5 &&
+        Math.abs(costoUsado - tela.costoUsado) < 1
+      ) {
+        return tela
+      }
+
+      cambio = true
+      return { ...tela, precioUnitario, cantidadUsada, costoUsado }
+    })
+
+    if (!cambio) return
+    const actualizada: Encimada = { ...encimada, telasUsadas }
+    setEncimadas((prev) =>
+      prev.map((e) => (e.id === actualizada.id ? actualizada : e)),
+    )
+    postGasAction('guardarEncimada', actualizada)
   }
 
   const addProveedor = (proveedor: Proveedor) => {
@@ -771,18 +958,7 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
     setCortes((prev) =>
       prev.map((c) => {
         if (c.id === articulo.corteId || c.modeloId === articulo.id) {
-          const corteActualizado = {
-            ...c,
-            modeloNombre: articulo.nombre,
-            tallerId: articulo.tallerId || c.tallerId,
-            tallerNombre: articulo.tallerNombre || c.tallerNombre,
-            cantidadPrendas: articulo.cantidadPrendas,
-            precioPorPrenda: articulo.manoObra,
-            costoTela: articulo.costoTelaTotalUsado,
-            costoManoObra: articulo.manoObra * articulo.cantidadPrendas,
-            costoTotal: articulo.costoTotalProduccion,
-            costoPorPrenda: articulo.costoUnitario,
-          }
+          const corteActualizado = corteDesdeArticulo(c, articulo)
           postGasAction('guardarCorte', corteActualizado)
           return corteActualizado
         }
@@ -948,6 +1124,27 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
     articulosAfectados.forEach((articulo) => {
       postGasAction('guardarArticulo', articulo)
     })
+
+    // Los cortes vinculados reflejan el costo recalculado del artículo.
+    setCortes((prev) =>
+      prev.map((corte) => {
+        const articulo = articulosAfectados.find(
+          (a) => a.corteId === corte.id || a.id === corte.modeloId,
+        )
+        if (!articulo) return corte
+        const actualizado = corteDesdeArticulo(corte, articulo)
+        if (
+          actualizado.costoTela === corte.costoTela &&
+          actualizado.costoTotal === corte.costoTotal &&
+          actualizado.cantidadPrendas === corte.cantidadPrendas &&
+          actualizado.precioPorPrenda === corte.precioPorPrenda
+        ) {
+          return corte
+        }
+        postGasAction('guardarCorte', actualizado)
+        return actualizado
+      }),
+    )
   }
 
   const deleteEncimada = (encimadaId: string) => {
@@ -972,6 +1169,8 @@ export function ErpStoreProvider({ children }: { children: ReactNode }) {
         proveedores,
         addCompra,
         updateCompra,
+        refrescarComprasDesdeSheets,
+        sincronizarPreciosEncimada,
         addProveedor,
         saveTaller,
         deleteTaller,

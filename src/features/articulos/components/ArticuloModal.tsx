@@ -1,7 +1,12 @@
 import { useState, useMemo } from 'react'
 import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
-import { comprasDesdeStock } from '../stockRollos'
+import {
+  buscarOpcionVigente,
+  buscarPrecioVigente,
+  comprasDesdeStock,
+  promedioPorRollo,
+} from '../stockRollos'
 import type { OpcionRollo } from '../stockRollos'
 import { usosStockDesdeDatos } from '../../../data/mock'
 import { useErpStore } from '../../../data/erpStore'
@@ -30,7 +35,12 @@ interface TelaLine {
   precioUnitario: number
   disponibleRollos: number
   disponibleCantidad: number
+  rollosLote: number
+  cantidadLote: number
   rollosUsar: number
+  /** Consumo ya registrado en el artículo (para reconstruir el lote al refrescar). */
+  rollosGuardados: number
+  cantidadGuardada: number
 }
 
 interface AvioLine {
@@ -53,6 +63,29 @@ interface GrupoTelas {
   proveedorNombre?: string
   compraFecha?: string
   telas: TelaCalculada[]
+}
+
+/**
+ * Calcula el consumo de una línea de tela.
+ *
+ * El metraje usa el promedio real del lote completo (`cantidadLote /
+ * rollosLote`), no el promedio del stock restante: si no, a medida que otros
+ * artículos consumen el mismo lote el promedio sube y el metraje se infla.
+ */
+function calcularTela(t: TelaLine): TelaCalculada {
+  const rollosUsados = Math.max(
+    0,
+    Math.min(t.disponibleRollos, redondearRollos(t.rollosUsar ?? t.disponibleRollos)),
+  )
+  const cantidadPorRollo =
+    t.rollosLote > 0
+      ? t.cantidadLote / t.rollosLote
+      : t.disponibleRollos > 0
+        ? t.disponibleCantidad / t.disponibleRollos
+        : 15
+  const cantidadUsada = Math.round(cantidadPorRollo * rollosUsados * 10) / 10
+  const costoUsado = Math.round(cantidadUsada * t.precioUnitario)
+  return { ...t, rollosUsados, cantidadUsada, costoUsado }
 }
 
 const COLOR_SWATCH: Record<string, string> = {
@@ -80,25 +113,20 @@ const labelCls = 'mb-1 block text-xs font-medium text-stone-500'
 function telasIniciales(articulo: Articulo | null | undefined, opciones: OpcionRollo[]): TelaLine[] {
   if (!articulo?.telas) return []
   return articulo.telas.map((t, idx) => {
-    // Buscar en el stock actual para conocer disponibilidad y datos del lote
-    const opcionStock = opciones.find(
-      (op) =>
-        (t.stockKey && op.stockKey === t.stockKey) ||
-        (t.compraCodigo &&
-          op.compraCodigo === t.compraCodigo &&
-          op.colorNombre.toLowerCase() === t.colorNombre.toLowerCase()) ||
-        (op.telaNombre.toLowerCase() === t.telaNombre.toLowerCase() &&
-          op.colorNombre.toLowerCase() === t.colorNombre.toLowerCase()),
-    )
-    const rollosUsadosActuales = Math.max(1, Number(t.rollosUsados) || 1)
+    // Buscar el lote exacto que usó el artículo (por stockKey / compra+lote).
+    const opcionStock = buscarOpcionVigente(t, opciones)
+    const rollosGuardados = Number(t.rollosUsados) || 0
+    const cantidadGuardada = Number(t.cantidadUsar) || 0
+    // Respetar fracciones (0,5 rollos): antes se forzaba a 1 y duplicaba el
+    // metraje de las telas que la encimada había cargado con medios rollos.
+    const rollosUsadosActuales = rollosGuardados > 0 ? rollosGuardados : 1
     const disponibleRollos = opcionStock
-      ? Math.max(rollosUsadosActuales, opcionStock.rollosDisponibles + rollosUsadosActuales)
+      ? Math.max(rollosUsadosActuales, opcionStock.rollosDisponibles + rollosGuardados)
       : Math.max(rollosUsadosActuales, Number(t.rollosDisponibles) || rollosUsadosActuales)
 
-    const cantidadUsada = Number(t.cantidadUsar) || 0
     const disponibleCantidad = opcionStock
-      ? opcionStock.cantidadDisponible + cantidadUsada
-      : (Number(t.cantidadLibre) || 0) + cantidadUsada
+      ? opcionStock.cantidadDisponible + cantidadGuardada
+      : (Number(t.cantidadLibre) || 0) + cantidadGuardada
 
     return {
       id: `tela-${idx + 1}`,
@@ -116,7 +144,11 @@ function telasIniciales(articulo: Articulo | null | undefined, opciones: OpcionR
       precioUnitario: Number(t.precioUnitario) || opcionStock?.precioUnitario || 0,
       disponibleRollos,
       disponibleCantidad,
+      rollosLote: opcionStock?.rollosLote ?? 0,
+      cantidadLote: opcionStock?.cantidadLote ?? 0,
       rollosUsar: rollosUsadosActuales,
+      rollosGuardados,
+      cantidadGuardada,
     }
   })
 }
@@ -132,7 +164,14 @@ function aviosIniciales(articulo?: Articulo | null): AvioLine[] {
 }
 
 export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Props) {
-  const { compras, encimadas, articulos, talleres } = useErpStore()
+  const {
+    compras,
+    encimadas,
+    articulos,
+    talleres,
+    refrescarComprasDesdeSheets,
+    sincronizarPreciosEncimada,
+  } = useErpStore()
   const usosStock = useMemo(
     () => usosStockDesdeDatos(encimadas, articulos),
     [encimadas, articulos],
@@ -171,6 +210,7 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
     articulo ? Number(articulo.precioVenta) || 0 : 0,
   )
   const [precioManual, setPrecioManual] = useState(!!articulo?.precioVenta)
+  const [actualizandoPrecios, setActualizandoPrecios] = useState(false)
   const [encimadaId, setEncimadaId] = useState(articulo?.encimadaId || '')
   const [encimadaItemId, setEncimadaItemId] = useState(articulo?.encimadaItemId || '')
 
@@ -227,22 +267,7 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
   const cantPrendas = Math.max(0, Number(cantidadPrendas) || 0)
 
   // Cálculos de telas
-  const telasCalculadas = telas.map((t) => {
-    const rollosUsados = Math.max(
-      0,
-      Math.min(t.disponibleRollos, redondearRollos(t.rollosUsar ?? t.disponibleRollos)),
-    )
-    const cantidadPorRollo =
-      t.disponibleRollos > 0 ? t.disponibleCantidad / t.disponibleRollos : 15
-    const cantidadUsada = Math.round(cantidadPorRollo * rollosUsados * 10) / 10
-    const costoUsado = Math.round(cantidadUsada * t.precioUnitario)
-    return {
-      ...t,
-      rollosUsados,
-      cantidadUsada,
-      costoUsado,
-    }
-  })
+  const telasCalculadas = telas.map(calcularTela)
 
   // Agrupación visual por tela y compra idéntica a EncimadaModal
   const gruposTelas = telasCalculadas.reduce<GrupoTelas[]>((grupos, tela) => {
@@ -268,41 +293,20 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
   const costoTelaPorPrenda = cantPrendas > 0 ? Math.round((costoTelaTotal / cantPrendas) * 100) / 100 : 0
 
   const precioActualTela = (tela: {
+    stockKey?: string
+    loteId?: string
+    compraCodigo?: string
     telaNombre: string
     colorNombre: string
-    compraCodigo?: string
-  }) => {
-    if (tela.compraCodigo === 'CUSTOM') return undefined
-    const telaNombre = tela.telaNombre.trim().toLowerCase()
-    const colorNombre = tela.colorNombre.trim().toLowerCase()
-    let masReciente: OpcionRollo | undefined
-    for (const opcion of opcionesStock) {
-      if (opcion.telaNombre.trim().toLowerCase() !== telaNombre) continue
-      if (opcion.colorNombre.trim().toLowerCase() !== colorNombre) continue
-      if (
-        !masReciente ||
-        String(opcion.compraFecha) > String(masReciente.compraFecha)
-      ) {
-        masReciente = opcion
-      }
-    }
-    return masReciente && masReciente.precioUnitario > 0
-      ? masReciente.precioUnitario
-      : undefined
-  }
+  }) => buscarPrecioVigente(tela, opcionesStock)
 
   const telasConCambio = telasCalculadas.filter((tela) => {
-    const precioActual = precioActualTela(tela)
+    const precioActual = precioActualTela(tela)?.precioUnitario
     return (
       typeof precioActual === 'number' &&
       Math.abs(precioActual - tela.precioUnitario) > 0.5
     )
   })
-
-  const costoConPreciosActuales = telasCalculadas.reduce((total, tela) => {
-    const precioActual = precioActualTela(tela) ?? tela.precioUnitario
-    return total + Math.round(tela.cantidadUsada * precioActual)
-  }, 0)
 
   // Cálculos de avíos
   const aviosValidos = avios.filter((a) => a.nombre.trim() || Number(a.monto) > 0)
@@ -338,7 +342,8 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
     if (!opcion) return
     if (telas.some((t) => t.stockKey === opcion.key)) return
 
-    const disponibleRollos = Math.max(1, opcion.rollosDisponibles)
+    // Rollos disponibles del lote tal cual (puede ser 0,5).
+    const disponibleRollos = redondearRollos(opcion.rollosDisponibles)
     const nueva: TelaLine = {
       id: `tela-${telas.length + 1}`,
       stockKey: opcion.key,
@@ -352,7 +357,11 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
       precioUnitario: opcion.precioUnitario,
       disponibleRollos,
       disponibleCantidad: opcion.cantidadDisponible,
+      rollosLote: opcion.rollosLote,
+      cantidadLote: opcion.cantidadLote,
       rollosUsar: disponibleRollos, // Por defecto carga todo el stock disponible
+      rollosGuardados: 0,
+      cantidadGuardada: 0,
     }
 
     setTelas((prev) => [...prev, nueva])
@@ -362,7 +371,7 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
   const handleAgregarRolloCustom = () => {
     if (!customTela.trim() || !customColor.trim()) return
 
-    const rollosNum = Math.max(1, Number(customRollos) || 1)
+    const rollosNum = Math.max(0.5, redondearRollos(Number(customRollos) || 0.5))
     const cantidadTotal = Number(customCantidad) > 0 ? Number(customCantidad) : rollosNum * 20
     const precio = Math.max(0, Number(customPrecio) || 0)
     const customKey = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
@@ -379,7 +388,11 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
       precioUnitario: precio,
       disponibleRollos: rollosNum,
       disponibleCantidad: cantidadTotal,
+      rollosLote: rollosNum,
+      cantidadLote: cantidadTotal,
       rollosUsar: rollosNum,
+      rollosGuardados: 0,
+      cantidadGuardada: 0,
     }
 
     setTelas((prev) => [...prev, nueva])
@@ -424,33 +437,109 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
     setTelas((prev) => prev.filter((t) => t.id !== id))
   }
 
-  const handleRecalcularPrecios = () => {
-    if (telasConCambio.length === 0) {
-      window.alert('Los precios de las telas ya están actualizados con la última compra.')
-      return
+  const handleRecalcularPrecios = async () => {
+    if (actualizandoPrecios) return
+    setActualizandoPrecios(true)
+    try {
+      // Trae las compras directo de Sheets: el usuario no tiene que sincronizar
+      // todo el sistema para ver el precio/metraje real de cada lote.
+      const comprasSheets = await refrescarComprasDesdeSheets()
+      const base = comprasSheets ?? compras
+      const opcionesFrescas = comprasDesdeStock(base, usosStock).flatMap(
+        (c) => c.opciones,
+      )
+
+      const nuevasTelas = telas.map((tela) => {
+        const opcion = buscarOpcionVigente(tela, opcionesFrescas)
+        if (!opcion) return tela
+        const mismaCompra = opcion.compraCodigo === tela.compraCodigo
+        return {
+          ...tela,
+          precioUnitario: Number(opcion.precioUnitario) || tela.precioUnitario,
+          rollosLote: opcion.rollosLote || tela.rollosLote,
+          cantidadLote: opcion.cantidadLote || tela.cantidadLote,
+          disponibleRollos: Math.max(
+            tela.rollosUsar,
+            opcion.rollosDisponibles + tela.rollosGuardados,
+          ),
+          disponibleCantidad:
+            opcion.cantidadDisponible + tela.cantidadGuardada,
+          compraFecha: mismaCompra ? opcion.compraFecha : tela.compraFecha,
+          proveedorNombre: mismaCompra
+            ? opcion.proveedorNombre
+            : tela.proveedorNombre,
+        }
+      })
+
+      const calculadasNuevas = nuevasTelas.map(calcularTela)
+      const hayCambios = calculadasNuevas.some((tela, idx) => {
+        const previa = telasCalculadas[idx]
+        return (
+          Math.abs(tela.precioUnitario - previa.precioUnitario) > 0.5 ||
+          Math.abs(tela.cantidadUsada - previa.cantidadUsada) > 0.05
+        )
+      })
+
+      if (!hayCambios) {
+        window.alert(
+          comprasSheets
+            ? 'Los precios y metrajes ya coinciden con las compras de Sheets.'
+            : 'No se pudo consultar Sheets. Los datos locales ya están al día.',
+        )
+        return
+      }
+
+      const costoNuevo = calculadasNuevas.reduce((a, t) => a + t.costoUsado, 0)
+      const metrajeActual = telasCalculadas.reduce((a, t) => a + t.cantidadUsada, 0)
+      const metrajeNuevo = calculadasNuevas.reduce((a, t) => a + t.cantidadUsada, 0)
+
+      const mensaje = [
+        '¿Actualizar precio y metraje de las telas con los datos actuales de Sheets?',
+        '',
+        `Costo de tela actual: ${formatARS(costoTelaTotal)}`,
+        `Costo de tela nuevo: ${formatARS(costoNuevo)}`,
+        `Metraje actual: ${formatRollos(metrajeActual)} (m/kg)`,
+        `Metraje nuevo: ${formatRollos(metrajeNuevo)} (m/kg)`,
+        '',
+        precioManual
+          ? 'El precio de venta es manual y no se modifica. Usá "Sugerido" si querés recalcularlo con el margen actual.'
+          : 'El precio de venta se recalculará automáticamente con el margen actual.',
+        comprasSheets
+          ? ''
+          : 'No se pudo consultar Sheets: se usaron las compras cargadas localmente.',
+      ].join('\n')
+
+      if (!window.confirm(mensaje)) return
+
+      setTelas(nuevasTelas)
+
+      // Reflejar el mismo precio/metraje en la encimada de origen para no
+      // tener que repetir el refresco en Carga de capas.
+      if (articulo?.encimadaId) {
+        sincronizarPreciosEncimada(
+          articulo.encimadaId,
+          nuevasTelas.map((tela) => {
+            const opcion = buscarOpcionVigente(tela, opcionesFrescas)
+            const promedio = opcion
+              ? promedioPorRollo(opcion)
+              : tela.rollosLote > 0
+                ? tela.cantidadLote / tela.rollosLote
+                : undefined
+            return {
+              stockKey: tela.stockKey,
+              loteId: tela.loteId,
+              compraCodigo: tela.compraCodigo,
+              telaNombre: tela.telaNombre,
+              colorNombre: tela.colorNombre,
+              precioUnitario: tela.precioUnitario,
+              promedioPorRollo: promedio,
+            }
+          }),
+        )
+      }
+    } finally {
+      setActualizandoPrecios(false)
     }
-
-    const mensaje = [
-      '¿Actualizar los precios de tela con la última compra de cada tela/color?',
-      '',
-      `Costo de tela actual: ${formatARS(costoTelaTotal)}`,
-      `Costo de tela nuevo: ${formatARS(costoConPreciosActuales)}`,
-      '',
-      precioManual
-        ? 'El precio de venta es manual y no se modifica. Usá "Sugerido" si querés recalcularlo con el margen actual.'
-        : 'El precio de venta se recalculará automáticamente con el margen actual.',
-    ].join('\n')
-
-    if (!window.confirm(mensaje)) return
-
-    setTelas((prev) =>
-      prev.map((tela) => {
-        const precioActual = precioActualTela(tela)
-        return typeof precioActual === 'number' && precioActual > 0
-          ? { ...tela, precioUnitario: precioActual }
-          : tela
-      }),
-    )
   }
 
   // Manejo de avíos
@@ -537,7 +626,6 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
   const puedeGuardar =
     cantPrendas > 0 &&
     (nombre.trim().length > 0 || descripcion.trim().length > 0) &&
-    (talleres.length === 0 || Boolean(tallerId)) &&
     telasValidas &&
     encimadaValida
 
@@ -698,27 +786,23 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                {articulo && (
-                  <button
-                    type="button"
-                    onClick={handleRecalcularPrecios}
-                    disabled={telasConCambio.length === 0}
-                    title={
-                      telasConCambio.length > 0
-                        ? 'Compara con la última compra de cada tela/color'
-                        : 'Los precios coinciden con la última compra'
-                    }
-                    className={`rounded-md border px-2.5 py-1 text-[11px] font-medium transition ${
-                      telasConCambio.length > 0
-                        ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'
-                        : 'cursor-default border-stone-200 bg-stone-50 text-stone-400'
-                    }`}
-                  >
-                    {telasConCambio.length > 0
-                      ? `Actualizar precios (${telasConCambio.length})`
-                      : 'Precios al día'}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={handleRecalcularPrecios}
+                  disabled={actualizandoPrecios}
+                  title="Consulta en Sheets el precio y el metraje actuales de cada lote"
+                  className={`rounded-md border px-2.5 py-1 text-[11px] font-medium transition ${
+                    telasConCambio.length > 0
+                      ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'
+                      : 'border-stone-300 bg-white text-stone-700 hover:bg-stone-50'
+                  } disabled:cursor-wait disabled:opacity-60`}
+                >
+                  {actualizandoPrecios
+                    ? 'Consultando Sheets…'
+                    : telasConCambio.length > 0
+                      ? `↻ Actualizar precios (${telasConCambio.length})`
+                      : '↻ Actualizar precios'}
+                </button>
                 <div className="text-xs text-stone-600">
                   Total tela: <strong className="text-stone-900"><Money value={costoTelaTotal} /></strong>
                   {cantPrendas > 0 && (
@@ -1058,8 +1142,15 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
                                       delete next[tela.id]
                                       return next
                                     })
-                                    if (!tela.rollosUsar || tela.rollosUsar < 0.5) {
-                                      updateRollosUsar(tela.id, 0.5)
+                                    if (!tela.rollosUsar || tela.rollosUsar <= 0) {
+                                      // Restaurar lo consumido: 0,5 para telas nuevas y
+                                      // la fracción guardada (ej. 0,25) si viene de una capa.
+                                      const guardado =
+                                        tela.rollosGuardados > 0 ? tela.rollosGuardados : 0.5
+                                      updateRollosUsar(
+                                        tela.id,
+                                        Math.min(guardado, tela.disponibleRollos || guardado),
+                                      )
                                     } else if (tela.rollosUsar > tela.disponibleRollos) {
                                       updateRollosUsar(tela.id, tela.disponibleRollos)
                                     }
@@ -1121,19 +1212,17 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
                 Confección / Taller
               </span>
               <p className="mt-0.5 text-xs text-stone-500">
-                Asigná el taller y el pago estimado por prenda terminada.
+                El taller es opcional: podés definir el precio de mano de obra sin asignarlo.
               </p>
               <div className="mt-3">
-                <label className={labelCls}>Taller asignado</label>
+                <label className={labelCls}>Taller asignado (opcional)</label>
                 <select
-                  className={`${inputCls} ${
-                    talleres.length > 0 && !tallerId ? 'border-amber-400 bg-amber-50' : ''
-                  }`}
+                  className={inputCls}
                   value={tallerId}
                   onChange={(e) => setTallerId(e.target.value)}
                 >
                   <option value="">
-                    {talleres.length === 0 ? 'No hay talleres cargados' : '-- Elegir taller --'}
+                    {talleres.length === 0 ? 'Sin talleres cargados' : '-- Sin asignar --'}
                   </option>
                   {talleres.map((t) => (
                     <option key={t.id} value={t.id}>
@@ -1143,12 +1232,12 @@ export function ArticuloModal({ articulo, codigoSugerido, onClose, onSave }: Pro
                   ))}
                 </select>
                 {talleres.length === 0 ? (
-                  <p className="mt-1 text-[11px] text-amber-700">
-                    Cargá un taller en la sección Talleres para poder asignarlo.
+                  <p className="mt-1 text-[11px] text-stone-500">
+                    Podés cargar la mano de obra manualmente; el taller se puede asignar después.
                   </p>
                 ) : !tallerId ? (
-                  <p className="mt-1 text-[11px] text-amber-700">
-                    El artículo y su corte quedarán sin taller asignado.
+                  <p className="mt-1 text-[11px] text-stone-500">
+                    Sin taller asignado: el artículo y su corte quedan pendientes de asignación.
                   </p>
                 ) : null}
               </div>

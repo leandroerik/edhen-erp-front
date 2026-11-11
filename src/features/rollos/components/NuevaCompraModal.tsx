@@ -1,15 +1,27 @@
 import { useState } from 'react'
 import { Button } from '../../../shared/components/Button'
 import { Money } from '../../../shared/components/Money'
-import { mockTelas, mockColores } from '../../../data/mock'
+import {
+  mockTelas,
+  mockColores,
+  stockDesdeCompras,
+  usosStockDesdeDatos,
+} from '../../../data/mock'
 import { useErpStore } from '../../../data/erpStore'
+import { siguienteCodigo } from '../../../utils/codigos'
 import { hoyISO } from '../../../utils/format'
-import type { LoteColor, UnidadTela } from '../../../types'
+import { formatRollos } from '../../../utils/stock'
+import type { Compra, LoteColor, UnidadTela } from '../../../types'
 
 interface Props {
   open: boolean
   onClose: () => void
-  onSave: (data: any) => void
+  onSave: (compra: Compra) => void
+  compra?: Compra
+}
+
+function proveedorIdDesdeNombre(nombre: string) {
+  return `prov-${nombre.trim().toLowerCase().replace(/\s+/g, '-')}`
 }
 
 const inputCls =
@@ -32,30 +44,58 @@ function newLote(): LoteColor {
   }
 }
 
-export function NuevaCompraModal({ open, onClose, onSave }: Props) {
-  const { proveedores, compras } = useErpStore()
+export function NuevaCompraModal({ open, onClose, onSave, compra }: Props) {
+  const { proveedores, compras, encimadas, articulos, addProveedor } = useErpStore()
   const proveedoresSugeridos = (() => {
     const mapa = new Map<string, string>()
     for (const p of proveedores) {
-      const nombre = p.nombre.trim()
+      const nombre = String(p.nombre ?? '').trim()
       if (nombre) mapa.set(nombre.toLowerCase(), nombre)
     }
-    for (const compra of compras) {
-      const nombre = (compra.proveedorNombre || '').trim()
+    for (const compraItem of compras) {
+      const nombre = String(compraItem.proveedorNombre ?? '').trim()
       if (nombre) mapa.set(nombre.toLowerCase(), nombre)
     }
     return Array.from(mapa.entries()).map(([id, nombre]) => ({ id, nombre }))
   })()
-  const [fecha, setFecha] = useState(() => hoyISO())
-  const [proveedor, setProveedor] = useState(proveedoresSugeridos[0]?.nombre || '')
-  const [tela, setTela] = useState(mockTelas[0]?.nombre || '')
-  const [unidad, setUnidad] = useState<UnidadTela>('METRO')
-  const [precioUnitario, setPrecioUnitario] = useState<number>(0)
-  const [notaRemito, setNotaRemito] = useState('')
-  const [flete, setFlete] = useState<number>(0)
-  const [lotes, setLotes] = useState<LoteColor[]>([newLote()])
+  const [fecha, setFecha] = useState(() => String(compra?.fecha ?? hoyISO()))
+  const [proveedor, setProveedor] = useState(() =>
+    String(compra?.proveedorNombre ?? proveedoresSugeridos[0]?.nombre ?? ''),
+  )
+  const [tela, setTela] = useState(() =>
+    String(compra?.telaNombre ?? mockTelas[0]?.nombre ?? ''),
+  )
+  const [unidad, setUnidad] = useState<UnidadTela>(() => compra?.unidadCompra ?? 'METRO')
+  const [precioUnitario, setPrecioUnitario] = useState<number>(
+    () => Number(compra?.precioUnitario) || 0,
+  )
+  // Sheets puede devolver números en columnas de texto (ej. remito "12345").
+  const [notaRemito, setNotaRemito] = useState(() =>
+    String(compra?.notaRemito ?? ''),
+  )
+  const [flete, setFlete] = useState<number>(() => compra?.flete ?? 0)
+  const [lotes, setLotes] = useState<LoteColor[]>(() =>
+    compra?.lotes?.length ? compra.lotes.map((lote) => ({ ...lote })) : [newLote()],
+  )
 
   if (!open) return null
+
+  // Los lotes con consumo registrado no se pueden quitar: dejarían usos huérfanos.
+  const lotesConUso = new Set<string>()
+  if (compra) {
+    const usos = usosStockDesdeDatos(encimadas, articulos)
+    const stock = stockDesdeCompras(compras, usos)
+    for (const item of stock) {
+      for (const detalle of item.lotesDetalle) {
+        if (
+          detalle.compraCodigo === compra.codigo &&
+          (detalle.usadoCantidad > 0 || detalle.usadoRollos > 0)
+        ) {
+          lotesConUso.add(detalle.loteId)
+        }
+      }
+    }
+  }
 
   const pUnitario = Math.max(0, Number(precioUnitario) || 0)
   const unidadLabel = unidad === 'METRO' ? 'm' : 'kg'
@@ -63,9 +103,19 @@ export function NuevaCompraModal({ open, onClose, onSave }: Props) {
   const lotesCalculados = lotes.map((l) => {
     const cant = Math.max(0, Number(l.cantidad) || 0)
     const rollos = Math.max(0, Number(l.rollos) || 0)
-    const subtotal = cant * pUnitario
+    const subtotal = Math.round(cant * pUnitario)
+    const colorObj = mockColores.find(
+      (c) =>
+        String(c.nombre ?? '').trim().toLowerCase() ===
+        String(l.colorNombre ?? '').trim().toLowerCase(),
+    )
+    const colorId =
+      colorObj?.id ||
+      l.colorId ||
+      `col-${String(l.colorNombre ?? '').trim().toLowerCase().replace(/\s+/g, '-')}`
     return {
       ...l,
+      colorId,
       rollos,
       cantidad: cant,
       subtotal,
@@ -78,15 +128,18 @@ export function NuevaCompraModal({ open, onClose, onSave }: Props) {
   const totalCompra = subtotalColores + (Number(flete) || 0)
 
   const filasConDatos = lotesCalculados.filter(
-    (l) => l.colorNombre.trim() || l.cantidad > 0 || l.rollos > 0,
+    (l) =>
+      String(l.colorNombre ?? '').trim() || l.cantidad > 0 || l.rollos > 0,
   )
   const lotesValidos = lotesCalculados.filter(
-    (l) => l.colorNombre.trim() && (l.rollos > 0 || l.cantidad > 0),
+    (l) =>
+      String(l.colorNombre ?? '').trim() && (l.rollos > 0 || l.cantidad > 0),
   )
   const puedeGuardar =
     filasConDatos.length > 0 &&
     filasConDatos.every(
-      (l) => l.colorNombre.trim() && (l.rollos > 0 || l.cantidad > 0),
+      (l) =>
+        String(l.colorNombre ?? '').trim() && (l.rollos > 0 || l.cantidad > 0),
     )
 
   const updateLote = (id: string, patch: Partial<LoteColor>) => {
@@ -113,19 +166,42 @@ export function NuevaCompraModal({ open, onClose, onSave }: Props) {
   }
 
   const handleSave = () => {
-    onSave({
+    const proveedorNombre = String(proveedor).trim() || 'Proveedor'
+    const proveedorExistente = proveedores.find(
+      (p) => p.nombre.trim().toLowerCase() === proveedorNombre.toLowerCase(),
+    )
+    const proveedorId =
+      proveedorExistente?.id ?? proveedorIdDesdeNombre(proveedorNombre)
+    if (proveedorNombre !== 'Proveedor') {
+      addProveedor({ id: proveedorId, nombre: proveedorNombre })
+    }
+
+    const telaNombre = String(tela).trim() || 'Tela'
+    const telaObj = mockTelas.find(
+      (t) => t.nombre.trim().toLowerCase() === telaNombre.toLowerCase(),
+    )
+    const telaId = telaObj?.id ?? `tel-${telaNombre.toLowerCase().replace(/\s+/g, '-')}`
+
+    const compraGuardada: Compra = {
+      id: compra?.id ?? `comp-${Date.now()}`,
+      codigo:
+        compra?.codigo ??
+        siguienteCodigo('COMP', compras.map((c) => c.codigo)),
       fecha,
-      proveedor: proveedor.trim() || 'Proveedor',
-      tela: tela.trim() || 'Tela',
-      unidad,
+      proveedorId,
+      proveedorNombre,
+      telaId,
+      telaNombre,
+      unidadCompra: unidad,
       precioUnitario: pUnitario,
-      notaRemito: notaRemito.trim() || undefined,
-      flete: Number(flete) || 0,
-      total: totalCompra,
-      totalRollos,
-      totalCantidad,
       lotes: lotesValidos,
-    })
+      flete: Number(flete) || 0,
+      notaRemito: String(notaRemito).trim() || undefined,
+      total: totalCompra,
+      usada: compra?.usada ?? false,
+    }
+
+    onSave(compraGuardada)
     onClose()
   }
 
@@ -134,7 +210,9 @@ export function NuevaCompraModal({ open, onClose, onSave }: Props) {
       <div className="flex max-h-[92vh] w-full max-w-3xl flex-col rounded-lg bg-white shadow-xl">
         {/* Cabecera */}
         <div className="flex items-center justify-between border-b border-stone-200 px-5 py-3">
-          <h2 className="text-base font-semibold text-stone-900">Nueva compra de tela</h2>
+          <h2 className="text-base font-semibold text-stone-900">
+            {compra ? 'Editar compra de tela' : 'Nueva compra de tela'}
+          </h2>
           <button
             onClick={onClose}
             className="flex h-7 w-7 items-center justify-center rounded text-stone-400 hover:bg-stone-100 hover:text-stone-700"
@@ -142,6 +220,14 @@ export function NuevaCompraModal({ open, onClose, onSave }: Props) {
             ✕
           </button>
         </div>
+
+        {compra && (
+          <div className="border-b border-amber-200 bg-amber-50 px-5 py-2 text-[11px] leading-relaxed text-amber-900">
+            Se actualiza solo esta compra (precio y subtotales). Los costos de artículos,
+            cortes y capas no cambian automáticamente; se refrescan desde cada artículo con
+            el botón “Actualizar precios”.
+          </div>
+        )}
 
         {/* Datos generales de la compra */}
         <div className="space-y-2 border-b border-stone-200 bg-stone-50 px-5 py-3">
@@ -197,8 +283,11 @@ export function NuevaCompraModal({ open, onClose, onSave }: Props) {
                 <input
                   type="number"
                   min="0"
+                  step="0.01"
+                  inputMode="decimal"
                   className={`${inputCls} min-w-0 flex-1`}
                   value={precioUnitario || ''}
+                  onFocus={(e) => e.currentTarget.select()}
                   onChange={(e) => setPrecioUnitario(Number(e.target.value) || 0)}
                   placeholder="0"
                 />
@@ -230,8 +319,11 @@ export function NuevaCompraModal({ open, onClose, onSave }: Props) {
               <input
                 type="number"
                 min="0"
+                step="0.01"
+                inputMode="decimal"
                 className={inputCls}
                 value={flete || ''}
+                onFocus={(e) => e.currentTarget.select()}
                 onChange={(e) => setFlete(Number(e.target.value) || 0)}
                 placeholder="0"
               />
@@ -259,7 +351,7 @@ export function NuevaCompraModal({ open, onClose, onSave }: Props) {
                       <input
                         list="colores-compra"
                         className={inputCls}
-                        value={l.colorNombre}
+                        value={String(l.colorNombre ?? '')}
                         onChange={(e) =>
                           updateLote(l.id, { colorNombre: e.target.value })
                         }
@@ -269,14 +361,16 @@ export function NuevaCompraModal({ open, onClose, onSave }: Props) {
                     <td className="p-1.5 text-right">
                       <input
                         type="number"
-                        min="1"
+                        min="0"
+                        step="0.1"
                         className={numberInputCls}
-                          value={l.rollos || ''}
-                          onFocus={(e) => e.currentTarget.select()}
-                          onChange={(e) =>
-                            updateLote(l.id, { rollos: Number(e.target.value) || 0 })
-                          }
-                          placeholder="1"
+                        value={l.rollos || ''}
+                        onFocus={(e) => e.currentTarget.select()}
+                        onChange={(e) =>
+                          updateLote(l.id, { rollos: Number(e.target.value) || 0 })
+                        }
+                        placeholder="1"
+                        title="Podés usar medios rollos (ej. 0,5)"
                       />
                     </td>
                     <td className="p-1.5 text-right">
@@ -300,8 +394,13 @@ export function NuevaCompraModal({ open, onClose, onSave }: Props) {
                       <button
                         type="button"
                         onClick={() => removeLote(l.id)}
-                        className="text-xs text-stone-400 hover:text-red-600"
-                        title="Quitar fila"
+                        disabled={lotesConUso.has(l.id)}
+                        className="text-xs text-stone-400 hover:text-red-600 disabled:cursor-not-allowed disabled:text-stone-300 disabled:hover:text-stone-300"
+                        title={
+                          lotesConUso.has(l.id)
+                            ? 'No se puede quitar: tiene consumo registrado'
+                            : 'Quitar fila'
+                        }
                       >
                         ✕
                       </button>
@@ -320,7 +419,7 @@ export function NuevaCompraModal({ open, onClose, onSave }: Props) {
                     ) : null}
                   </td>
                   <td className="px-3 py-2 text-right text-xs tabular-nums">
-                    {totalRollos}
+                    {formatRollos(totalRollos)}
                   </td>
                   <td className="px-3 py-2 text-right text-xs tabular-nums">
                     {totalCantidad.toFixed(2)} {unidadLabel}
@@ -357,7 +456,7 @@ export function NuevaCompraModal({ open, onClose, onSave }: Props) {
             Cancelar
           </Button>
           <Button onClick={handleSave} disabled={!puedeGuardar}>
-            Guardar compra
+            {compra ? 'Guardar cambios' : 'Guardar compra'}
           </Button>
         </div>
       </div>
