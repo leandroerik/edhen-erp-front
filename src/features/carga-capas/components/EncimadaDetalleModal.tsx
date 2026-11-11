@@ -139,7 +139,70 @@ export function EncimadaDetalleModal({ encimada, onClose, onEdit, onDelete }: Pr
                 Prendas por modelo y color
               </span>
             </div>
-            <div className="overflow-x-auto">
+
+            {/* Mobile: resumen por modelo con desglose de colores */}
+            <div className="space-y-2 p-2 sm:hidden">
+              {itemsValidos.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-stone-200 px-3 py-4 text-center text-xs text-stone-400">
+                  Sin modelos cargados.
+                </div>
+              ) : (
+                itemsValidos.map((item) => {
+                  const cantidad = Number(item.cantidad) || 0
+                  return (
+                    <div
+                      key={item.id}
+                      className="rounded-lg border border-stone-200 bg-stone-50/60 p-2.5 text-xs"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="truncate font-medium text-stone-900">
+                            {item.modeloNombre}
+                          </div>
+                          <div className="text-[10px] text-stone-500">
+                            {cantidad} {cantidad === 1 ? 'talle' : 'talles'} por capa
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <div className="font-semibold text-stone-900">
+                            {capasTotales * cantidad} prendas
+                          </div>
+                          <div className="text-[10px] text-stone-500">total del modelo</div>
+                        </div>
+                      </div>
+                      {colores.length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {colores.map((color) => (
+                            <span
+                              key={color.key}
+                              className="inline-flex items-center gap-1 rounded-full border border-stone-200 bg-white px-1.5 py-0.5 text-[10px] text-stone-600"
+                            >
+                              <span
+                                className={`h-1.5 w-1.5 shrink-0 rounded-full border border-stone-300 ${
+                                  COLOR_SWATCH[color.nombre] ?? 'bg-stone-200'
+                                }`}
+                              />
+                              {color.nombre}:{' '}
+                              <strong className="font-semibold text-stone-800">
+                                {color.capas * cantidad}
+                              </strong>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })
+              )}
+              {itemsValidos.length > 0 && (
+                <div className="flex items-center justify-between rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-2 text-xs">
+                  <span className="font-semibold text-stone-900">Total</span>
+                  <span className="font-bold text-stone-900">{prendasTotales} prendas</span>
+                </div>
+              )}
+            </div>
+
+            <div className="hidden overflow-x-auto sm:block">
               <table className="w-full min-w-[420px] divide-y divide-stone-200">
                 <thead className="bg-white">
                   <tr>

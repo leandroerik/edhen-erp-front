@@ -6,6 +6,7 @@ import { formatCantidad, formatRollos, getStockInfo } from '../../../utils/stock
 import { stockDesdeCompras, usosStockDesdeDatos } from '../../../data/mock'
 import { useErpStore } from '../../../data/erpStore'
 import { resumenPagoCorte } from '../../pagos/pagos.utils'
+import { telasUnicas } from '../../../utils/telas'
 import {
   DisponibilidadTelaModal,
   type ColorDisponible,
@@ -301,7 +302,14 @@ export function ResumenPage() {
           Number(art.gananciaTotal) ||
           (Number(art.gananciaUnitaria) || precioVenta - costoUnitario) * cantidad
 
-        return { ...art, cantidad, precioVenta, gananciaTotal }
+        return {
+          ...art,
+          cantidad,
+          precioVenta,
+          costoUnitario,
+          costoTotal: costoUnitario * cantidad,
+          gananciaTotal,
+        }
       })
   }, [articulos])
 
@@ -309,6 +317,46 @@ export function ResumenPage() {
     () => productosResumen.reduce((acc, p) => acc + p.cantidad, 0),
     [productosResumen],
   )
+
+  // Tags de tela (tipo de tela, sin color) para filtrar y sumar la selección.
+  const [telasSeleccionadas, setTelasSeleccionadas] = useState<string[]>([])
+
+  const toggleTela = (nombre: string) => {
+    const key = nombre.trim().toLowerCase()
+    if (!key) return
+    setTelasSeleccionadas((prev) =>
+      prev.some((n) => n.trim().toLowerCase() === key)
+        ? prev.filter((n) => n.trim().toLowerCase() !== key)
+        : [...prev, nombre.trim()],
+    )
+  }
+
+  const esTelaSeleccionada = (nombre: string) => {
+    const key = nombre.trim().toLowerCase()
+    return telasSeleccionadas.some((n) => n.trim().toLowerCase() === key)
+  }
+
+  const productosFiltrados = useMemo(() => {
+    if (telasSeleccionadas.length === 0) return productosResumen
+    const seleccion = new Set(telasSeleccionadas.map((n) => n.trim().toLowerCase()))
+    return productosResumen.filter((producto) =>
+      (producto.telas || []).some((tela) =>
+        seleccion.has((tela.telaNombre || '').trim().toLowerCase()),
+      ),
+    )
+  }, [productosResumen, telasSeleccionadas])
+
+  const totalesSeleccion = useMemo(() => {
+    return productosFiltrados.reduce(
+      (acc, p) => ({
+        venta: acc.venta + p.precioVenta * p.cantidad,
+        costo: acc.costo + p.costoTotal,
+        ganancia: acc.ganancia + p.gananciaTotal,
+        prendas: acc.prendas + p.cantidad,
+      }),
+      { venta: 0, costo: 0, ganancia: 0, prendas: 0 },
+    )
+  }, [productosFiltrados])
 
   const [productosAbiertos, setProductosAbiertos] = useState(true)
 
@@ -610,12 +658,12 @@ export function ResumenPage() {
           <div>
             <h2 className="text-base font-semibold text-stone-900">Productos</h2>
             <p className="mt-0.5 text-xs text-stone-500">
-              Últimos cargados primero · cantidad, precio de venta y ganancia.
+              Últimos cargados primero · tocá una tela para filtrar y sumar venta, costo y ganancia.
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2 text-xs">
             <span className="rounded-full bg-stone-100 px-2 py-0.5 font-semibold text-stone-700">
-              {totalPrendas} prendas
+              {telasSeleccionadas.length > 0 ? totalesSeleccion.prendas : totalPrendas} prendas
             </span>
             <span className="font-medium text-amber-700">
               {productosAbiertos ? 'Ocultar' : 'Ver'}
@@ -625,37 +673,128 @@ export function ResumenPage() {
 
         {productosAbiertos && (
           <>
-            {/* Mobile: tarjetas por producto (scroll vertical) */}
-            <div className="max-h-[520px] space-y-3 overflow-y-auto border-t border-stone-100 p-3 md:hidden">
-              {productosResumen.length === 0 ? (
-                <div className="py-8 text-center text-sm text-stone-400">
-                  Todavía no hay productos generados.
-                </div>
-              ) : (
-                productosResumen.map((p) => (
-                  <div
-                    key={p.id}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-stone-200 p-3"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-stone-900">
-                        {p.nombre}
+            {/* Totales de las telas seleccionadas desde los productos */}
+            {telasSeleccionadas.length > 0 && (
+              <div className="border-t border-stone-100 px-4 py-3 sm:px-5">
+                <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-1.5">
+                    <div className="flex flex-wrap items-center gap-1">
+                      {telasSeleccionadas.map((nombre) => (
+                        <button
+                          key={nombre}
+                          type="button"
+                          onClick={() => toggleTela(nombre)}
+                          title="Quitar esta tela del filtro"
+                          className="inline-flex items-center gap-1 rounded-full border border-amber-400 bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-900"
+                        >
+                          {nombre}
+                          <span className="text-[10px]">✕</span>
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setTelasSeleccionadas([])}
+                      className="text-[11px] font-medium text-stone-500 underline-offset-2 hover:text-stone-800 hover:underline"
+                    >
+                      Limpiar ✕
+                    </button>
+                  </div>
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wide text-stone-500">
+                        Venta
                       </div>
-                      <div className="text-[11px] text-stone-500">
-                        {p.codigoArticulo} · {p.cantidad} u.
-                      </div>
-                      <div className="mt-0.5 text-[11px] text-emerald-700">
-                        Ganancia <Money value={p.gananciaTotal} />
+                      <div className="text-sm font-semibold tabular-nums text-stone-900">
+                        <Money value={totalesSeleccion.venta} />
                       </div>
                     </div>
-                    <div className="shrink-0 text-right">
-                      <div className="text-sm font-semibold text-stone-900">
-                        <Money value={p.precioVenta} />
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wide text-stone-500">
+                        Costo
                       </div>
-                      <div className="text-[10px] text-stone-400">precio venta</div>
+                      <div className="text-sm font-semibold tabular-nums text-amber-900">
+                        <Money value={totalesSeleccion.costo} />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wide text-stone-500">
+                        Ganancia
+                      </div>
+                      <div className="text-sm font-bold tabular-nums text-emerald-700">
+                        <Money value={totalesSeleccion.ganancia} />
+                      </div>
                     </div>
                   </div>
-                ))
+                  <div className="mt-1.5 text-[10px] text-stone-500">
+                    {telasSeleccionadas.length}{' '}
+                    {telasSeleccionadas.length === 1 ? 'tela' : 'telas'} ·{' '}
+                    {productosFiltrados.length}{' '}
+                    {productosFiltrados.length === 1 ? 'producto' : 'productos'} ·{' '}
+                    {totalesSeleccion.prendas} prendas
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Mobile: tarjetas por producto (scroll vertical) */}
+            <div className="max-h-[520px] space-y-3 overflow-y-auto border-t border-stone-100 p-3 md:hidden">
+              {productosFiltrados.length === 0 ? (
+                <div className="py-8 text-center text-sm text-stone-400">
+                  {productosResumen.length === 0
+                    ? 'Todavía no hay productos generados.'
+                    : 'Ningún producto usa las telas seleccionadas.'}
+                </div>
+              ) : (
+                productosFiltrados.map((p) => {
+                  const telasProducto = telasUnicas(p.telas || [])
+                  return (
+                    <div
+                      key={p.id}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-stone-200 p-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-stone-900">
+                          {p.nombre}
+                        </div>
+                        <div className="text-[11px] text-stone-500">
+                          {p.codigoArticulo} · {p.cantidad} u.
+                        </div>
+                        {telasProducto.length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {telasProducto.map((tela) => {
+                              const activa = esTelaSeleccionada(tela.telaNombre)
+                              return (
+                                <button
+                                  key={tela.key}
+                                  type="button"
+                                  onClick={() => toggleTela(tela.telaNombre)}
+                                  aria-pressed={activa}
+                                  className={`inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-medium transition-colors ${
+                                    activa
+                                      ? 'border-amber-400 bg-amber-100 text-amber-900'
+                                      : 'border-stone-200 bg-stone-50 text-stone-600 hover:border-stone-300'
+                                  }`}
+                                >
+                                  {tela.telaNombre}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                        <div className="mt-0.5 text-[11px] text-emerald-700">
+                          Ganancia <Money value={p.gananciaTotal} />
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="text-sm font-semibold text-stone-900">
+                          <Money value={p.precioVenta} />
+                        </div>
+                        <div className="text-[10px] text-stone-400">precio venta</div>
+                      </div>
+                    </div>
+                  )
+                })
               )}
             </div>
 
@@ -671,34 +810,61 @@ export function ResumenPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
-                  {productosResumen.length === 0 ? (
+                  {productosFiltrados.length === 0 ? (
                     <tr>
                       <td colSpan={4} className="px-4 py-12 text-center text-sm text-stone-400">
-                        Todavía no hay productos generados.
+                        {productosResumen.length === 0
+                          ? 'Todavía no hay productos generados.'
+                          : 'Ningún producto usa las telas seleccionadas.'}
                       </td>
                     </tr>
                   ) : (
-                    productosResumen.map((p) => (
-                      <tr key={p.id} className="transition-colors hover:bg-stone-50/70">
-                        <td className={td}>
-                          <div className="font-medium text-stone-900">{p.nombre}</div>
-                          <div className="text-xs text-stone-500">{p.codigoArticulo}</div>
-                        </td>
-                        <td className={tdRight}>{p.cantidad}</td>
-                        <td className={`${tdRight} font-medium`}>
-                          <Money value={p.precioVenta} />
-                        </td>
-                        <td className={`${tdRight} font-semibold text-emerald-700`}>
-                          <Money value={p.gananciaTotal} />
-                        </td>
-                      </tr>
-                    ))
+                    productosFiltrados.map((p) => {
+                      const telasProducto = telasUnicas(p.telas || [])
+                      return (
+                        <tr key={p.id} className="transition-colors hover:bg-stone-50/70">
+                          <td className={td}>
+                            <div className="font-medium text-stone-900">{p.nombre}</div>
+                            <div className="text-xs text-stone-500">{p.codigoArticulo}</div>
+                            {telasProducto.length > 0 && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {telasProducto.map((tela) => {
+                                  const activa = esTelaSeleccionada(tela.telaNombre)
+                                  return (
+                                    <button
+                                      key={tela.key}
+                                      type="button"
+                                      onClick={() => toggleTela(tela.telaNombre)}
+                                      aria-pressed={activa}
+                                      className={`inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-medium transition-colors ${
+                                        activa
+                                          ? 'border-amber-400 bg-amber-100 text-amber-900'
+                                          : 'border-stone-200 bg-stone-50 text-stone-600 hover:border-stone-300'
+                                      }`}
+                                    >
+                                      {tela.telaNombre}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </td>
+                          <td className={tdRight}>{p.cantidad}</td>
+                          <td className={`${tdRight} font-medium`}>
+                            <Money value={p.precioVenta} />
+                          </td>
+                          <td className={`${tdRight} font-semibold text-emerald-700`}>
+                            <Money value={p.gananciaTotal} />
+                          </td>
+                        </tr>
+                      )
+                    })
                   )}
                 </tbody>
               </table>
             </div>
 
-            {productosResumen.length > 8 && (
+            {productosFiltrados.length > 8 && (
               <div className="border-t border-stone-100 px-4 py-2 text-center text-[11px] text-stone-400">
                 Desplazá para ver el resto de los productos
               </div>
